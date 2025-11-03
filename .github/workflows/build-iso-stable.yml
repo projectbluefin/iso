@@ -1,5 +1,9 @@
 ---
 name: Build Stable ISOs
+# This workflow ONLY builds Stable ISOs (not LTS, LTS-HWE, or GTS)
+# Builds: 2 Stable ISOs
+#   - amd64 × main
+#   - amd64 × nvidia-open
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +24,6 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: stable
+      image_version: stable  # Strictly builds Stable ISOs only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
