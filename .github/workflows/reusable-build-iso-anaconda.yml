@@ -1,6 +1,5 @@
 ---
-name: Build ISOs (Live Anaconda)
-
+name: Reusable Build
 "on":
   workflow_call:
     inputs:
