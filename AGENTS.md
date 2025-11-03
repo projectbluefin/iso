@@ -6,6 +6,8 @@ This document provides essential information for coding agents working with the 
 
 **Bluefin ISO** is a dedicated repository for building bootable Bluefin installation ISOs using the Titanoboa ISO builder and Anaconda installer.
 
+**Repository History**: This repository was created by extracting ISO-specific functionality from [ublue-os/bluefin](https://github.com/ublue-os/bluefin). It focuses exclusively on ISO generation, while the main repository handles base image building.
+
 - **Type**: ISO build system for Bluefin operating system
 - **Base**: Uses pre-built Bluefin container images from `ghcr.io/ublue-os` or `ghcr.io/projectbluefin`
 - **Languages**: Bash scripts, YAML workflows, Just recipes
