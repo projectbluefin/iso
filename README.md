@@ -89,9 +89,13 @@ Schedule: All workflows run at 2am UTC on the 1st of each month
 ```
 
 ### Key Features
-- **Tight Scoping:** Each workflow only builds its designated ISOs
-- **Independent Execution:** Each workflow can run independently
-- **Orchestration:** The "Build All ISOs" workflow calls all others
+- **Strict ISO Scoping:** Each workflow builds ONLY its designated ISOs - no cross-contamination
+  - `build-iso-lts.yml` → **LTS ISOs only** (never builds GTS, Stable, or LTS-HWE)
+  - `build-iso-lts-hwe.yml` → **LTS-HWE ISOs only** (never builds GTS, Stable, or LTS)
+  - `build-iso-gts.yml` → **GTS ISOs only** (never builds LTS, LTS-HWE, or Stable)
+  - `build-iso-stable.yml` → **Stable ISOs only** (never builds LTS, LTS-HWE, or GTS)
+- **Independent Execution:** Each workflow can run independently without affecting others
+- **Orchestration:** The "Build All ISOs" workflow calls all others in parallel
 - **Flexible Upload:** Control artifact and R2 uploads per execution
 - **Consistent Scheduling:** All workflows on same monthly schedule (cron: `0 2 1 * *`)
 
@@ -116,7 +120,25 @@ Each variant supports multiple flavors:
 
 ## Building ISOs
 
-ISOs are built automatically via GitHub Actions workflows. Each variant has its own dedicated workflow.
+ISOs are built automatically via GitHub Actions workflows. Each variant has its own dedicated workflow that builds **only its specific ISOs**.
+
+### Workflow Separation (Important!)
+
+Each workflow is **strictly scoped** to build only its designated ISO variant:
+
+| Workflow File | Builds | Does NOT Build |
+|---------------|--------|----------------|
+| `build-iso-lts.yml` | **4 LTS ISOs only**<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ GTS<br/>❌ Stable<br/>❌ LTS-HWE |
+| `build-iso-lts-hwe.yml` | **2 LTS-HWE ISOs only**<br/>- amd64 × main<br/>- arm64 × main | ❌ GTS<br/>❌ Stable<br/>❌ LTS |
+| `build-iso-gts.yml` | **2 GTS ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE<br/>❌ Stable |
+| `build-iso-stable.yml` | **2 Stable ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE<br/>❌ GTS |
+| `build-iso-all.yml` | All 10 ISOs (calls all 4 workflows above) | N/A - orchestrator |
+
+This strict separation ensures:
+- ✅ Predictable builds: You know exactly which ISOs each workflow produces
+- ✅ Faster iterations: Build only the variants you need
+- ✅ Easier debugging: Issues are isolated to specific variants
+- ✅ Resource efficiency: No unnecessary builds
 
 ### Manual Build
 Trigger individual workflow dispatches for specific variants:

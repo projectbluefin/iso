@@ -1,5 +1,9 @@
 ---
 name: Build GTS ISOs
+# This workflow ONLY builds GTS ISOs (not LTS, LTS-HWE, or Stable)
+# Builds: 2 GTS ISOs
+#   - amd64 × main
+#   - amd64 × nvidia-open
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +24,6 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: gts
+      image_version: gts  # Strictly builds GTS ISOs only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}

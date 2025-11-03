@@ -1,5 +1,9 @@
 ---
 name: Build LTS-HWE ISOs
+# This workflow ONLY builds LTS-HWE ISOs (not GTS, Stable, or LTS)
+# Builds: 2 LTS-HWE ISOs
+#   - amd64 × main
+#   - arm64 × main
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +24,6 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: lts-hwe
+      image_version: lts-hwe  # Strictly builds LTS-HWE ISOs only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}

@@ -1,5 +1,11 @@
 ---
 name: Build LTS ISOs
+# This workflow ONLY builds LTS ISOs (not GTS, Stable, or LTS-HWE)
+# Builds: 4 LTS ISOs
+#   - amd64 × main
+#   - amd64 × gdx
+#   - arm64 × main
+#   - arm64 × gdx
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +26,6 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: lts
+      image_version: lts  # Strictly builds LTS ISOs only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}

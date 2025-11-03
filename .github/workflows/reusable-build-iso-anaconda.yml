@@ -33,6 +33,7 @@ env:
 
 jobs:
   # Define which variants to build based on input
+  # This job ensures strict separation: each image_version builds ONLY its own ISOs
   determine-matrix:
     name: Determine Build Matrix
     runs-on: ubuntu-latest
@@ -43,9 +44,12 @@ jobs:
         id: set-matrix
         run: |
           # Define the matrix based on the input selection
+          # When called via workflow_call, the image_version input determines which ISOs to build
+          # Each variant builds ONLY its own specific ISOs - no cross-contamination
           if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
             case "${{ inputs.image_version }}" in
               "lts")
+                # LTS variant: builds ONLY LTS ISOs (4 total)
                 matrix='{"include":[
                   {"platform":"amd64","flavor":"main","image_version":"lts"},
                   {"platform":"arm64","flavor":"main","image_version":"lts"},
@@ -54,24 +58,28 @@ jobs:
                 ]}'
                 ;;
               "lts-hwe")
+                # LTS-HWE variant: builds ONLY LTS-HWE ISOs (2 total)
                 matrix='{"include":[
                   {"platform":"amd64","flavor":"main","image_version":"lts-hwe"},
                   {"platform":"arm64","flavor":"main","image_version":"lts-hwe"}
                 ]}'
                 ;;
               "gts")
+                # GTS variant: builds ONLY GTS ISOs (2 total)
                 matrix='{"include":[
                   {"platform":"amd64","flavor":"main","image_version":"gts"},
                   {"platform":"amd64","flavor":"nvidia-open","image_version":"gts"}
                 ]}'
                 ;;
               "stable")
+                # Stable variant: builds ONLY Stable ISOs (2 total)
                 matrix='{"include":[
                   {"platform":"amd64","flavor":"main","image_version":"stable"},
                   {"platform":"amd64","flavor":"nvidia-open","image_version":"stable"}
                 ]}'
                 ;;
               "all")
+                # "all" is reserved for testing - builds all variants
                 matrix='{"include":[
                   {"platform":"amd64","flavor":"main","image_version":"gts"},
                   {"platform":"amd64","flavor":"nvidia-open","image_version":"gts"},
@@ -87,7 +95,8 @@ jobs:
                 ;;
             esac
           else
-            # Default for non-workflow_dispatch (like pull_request)
+            # Default for non-workflow_call (e.g., pull_request triggers)
+            # Build GTS and Stable only for faster PR validation
             matrix='{"include":[
               {"platform":"amd64","flavor":"main","image_version":"gts"},
               {"platform":"amd64","flavor":"nvidia-open","image_version":"gts"},

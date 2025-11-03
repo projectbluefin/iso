@@ -1,5 +1,12 @@
 ---
 name: Build All ISOs
+# Orchestrator workflow that calls ALL individual ISO build workflows
+# Each individual workflow builds ONLY its own specific ISOs:
+#   - build-iso-lts      → 4 LTS ISOs only
+#   - build-iso-lts-hwe  → 2 LTS-HWE ISOs only
+#   - build-iso-gts      → 2 GTS ISOs only
+#   - build-iso-stable   → 2 Stable ISOs only
+# Total: 10 ISOs across all variants
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +27,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: lts
+      image_version: lts  # Strictly LTS only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
 
@@ -29,7 +36,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: lts-hwe
+      image_version: lts-hwe  # Strictly LTS-HWE only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
 
@@ -38,7 +45,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: gts
+      image_version: gts  # Strictly GTS only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
 
@@ -47,6 +54,6 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
-      image_version: stable
+      image_version: stable  # Strictly Stable only
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
