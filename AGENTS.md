@@ -359,6 +359,88 @@ The `Justfile` contains build automation (copied from main Bluefin):
 
 This is a focused repository for ISO building. The main complexity is in the workflow orchestration and ISO configuration scripts.
 
+## Key Differences: Standard vs LTS
+
+Understanding the differences between Standard and LTS configurations is critical:
+
+| Aspect | Standard (GTS/Stable/Latest/Beta) | LTS (lts/lts-hwe) |
+|--------|-----------------------------------|-------------------|
+| **Base OS** | Fedora Linux | CentOS Stream |
+| **Filesystem** | BTRFS with compression | XFS |
+| **Builder Distro** | Fedora | CentOS |
+| **Secure Boot** | Enabled with key enrollment | Disabled (commented out) |
+| **Bootloader** | `efi_dir = fedora` | `efi_dir = centos` |
+| **Partitioning** | Standard Fedora scheme | Modified for CentOS |
+| **Repositories** | Fedora repos | CentOS repos |
+| **Special Flatpaks** | None | Bazaar (auto-added by workflow) |
+
+## Best Practices for AI Agents
+
+### DO:
+- ✅ Make minimal, surgical changes
+- ✅ Focus on ISO configuration and workflows
+- ✅ Use conventional commits
+- ✅ Run validation before committing
+- ✅ Test via workflow dispatch when possible
+- ✅ Use existing patterns and conventions
+- ✅ Include AI attribution in commits
+
+### DON'T:
+- ❌ Modify base image building (wrong repo)
+- ❌ Remove or edit working code unnecessarily
+- ❌ Fix unrelated bugs or broken tests
+- ❌ Build ISOs locally unless necessary
+- ❌ Skip validation steps
+- ❌ Use non-conventional commit messages
+- ❌ Add new tools without justification
+
+### Common Pitfalls:
+- **Large builds:** ISOs are resource-intensive, prefer GitHub Actions
+- **Pre-commit failures:** Run `pre-commit run --all-files` before commit
+- **Just syntax errors:** Run `just check` and `just fix`
+- **Workflow testing:** Test in fork first with workflow dispatch
+- **Flatpak validation:** IDs are checked against Flathub automatically
+
+## Quick Reference
+
+### File Locations
+- Workflows: `.github/workflows/`
+- ISO configs: `iso_files/configure_*_anaconda.sh`
+- Flatpaks: `flatpaks/*.list`
+- Build recipes: `Justfile`, `just/*.just`
+- Documentation: `README.md`, `AGENTS.md`, `CONTRIBUTING.md`
+
+### Common Commands
+```bash
+# Validation
+pre-commit run --all-files
+just check
+just fix
+
+# Local ISO build (from GHCR)
+just build-iso-ghcr bluefin stable main
+
+# Test ISO in VM
+just run-iso bluefin stable main
+
+# Clean build artifacts
+just clean
+```
+
+### Matrix Variants
+- **lts:** amd64/arm64 × main/gdx
+- **lts-hwe:** amd64/arm64 × main
+- **gts:** amd64 × main/nvidia-open
+- **stable:** amd64 × main/nvidia-open
+- **all:** All combinations
+
+## Related Resources
+
+- **Main Bluefin repo:** https://github.com/ublue-os/bluefin
+- **Bluefin LTS repo:** https://github.com/ublue-os/bluefin-lts
+- **Bluefin docs:** https://github.com/ublue-os/bluefin-docs
+- **Titanoboa:** https://github.com/ublue-os/titanoboa
+
 ## Other Rules Important to Maintainers
 
 - Ensure [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#specification) are used for every commit and PR title
@@ -368,8 +450,27 @@ This is a focused repository for ISO building. The main complexity is in the wor
 - Bluefin LTS repository: https://github.com/ublue-os/bluefin-lts
 - This repository focuses solely on ISO generation
 
-## Attribution Requirements
+## Commit Conventions (MANDATORY)
 
+This repository uses [Conventional Commits](https://www.conventionalcommits.org/):
+
+**Format:** `<type>(<scope>): <description>`
+
+**Types:**
+- `feat:` - New features
+- `fix:` - Bug fixes
+- `docs:` - Documentation changes
+- `ci:` - CI/CD changes
+- `chore:` - Maintenance tasks
+- `refactor:` - Code refactoring
+
+**Examples:**
+- `feat(iso): add ARM64 support`
+- `fix(flatpaks): correct invalid flatpak ID`
+- `docs(readme): update build instructions`
+- `ci(workflow): optimize matrix strategy`
+
+**AI Attribution:**
 AI agents must disclose what tool and model they are using in the "Assisted-by" commit footer:
 
 ```text
@@ -385,3 +486,7 @@ Add ARM64 platform to build matrix
 
 Assisted-by: Claude 3.5 Sonnet via GitHub Copilot
 ```
+
+## Summary
+
+This repository is focused exclusively on ISO generation for Bluefin. It uses pre-built container images and configures them for bootable installation media using Anaconda and Titanoboa. Development should focus on ISO configuration, workflows, and flatpak management. Always validate changes, use conventional commits, and prefer GitHub Actions for testing over local builds.
