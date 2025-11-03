@@ -18,11 +18,11 @@ name: Build ISOs (Live Anaconda)
         default: true
     secrets:
       R2_ACCESS_KEY_ID_2025:
-        required: true
+        required: false
       R2_SECRET_ACCESS_KEY_2025:
-        required: true
+        required: false
       R2_ENDPOINT_2025:
-        required: true
+        required: false
   pull_request:
     paths:
       - ".github/workflows/reusable-build-iso-anaconda.yml"
