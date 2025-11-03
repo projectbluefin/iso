@@ -46,7 +46,9 @@ jobs:
           # Define the matrix based on the input selection
           # When called via workflow_call, the image_version input determines which ISOs to build
           # Each variant builds ONLY its own specific ISOs - no cross-contamination
-          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+          # NOTE: Check if inputs.image_version is provided (indicates workflow_call)
+          # rather than checking github.event_name, which may not be reliable
+          if [[ -n "${{ inputs.image_version }}" ]]; then
             case "${{ inputs.image_version }}" in
               "lts")
                 # LTS variant: builds ONLY LTS ISOs (4 total)
@@ -95,7 +97,7 @@ jobs:
                 ;;
             esac
           else
-            # Default for non-workflow_call (e.g., pull_request triggers)
+            # Default for when image_version is not provided (e.g., pull_request triggers)
             # Build GTS and Stable only for faster PR validation
             matrix='{"include":[
               {"platform":"amd64","flavor":"main","image_version":"gts"},
