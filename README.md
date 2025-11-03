@@ -1,10 +1,10 @@
 # Bluefin ISO Builder
 
-This repository builds Bluefin ISOs using Anaconda installer.
+This repository builds Bluefin ISOs using Anaconda and [Titanoboa](https://github.com/ublue-os/titanoboa)
 
 ## Overview
 
-This repository contains the workflows and configuration files needed to build bootable Bluefin ISOs for installation. The ISOs are built using the [Titanoboa](https://github.com/ublue-os/titanoboa) ISO builder and include:
+Workflows and configuration files needed to build bootable Bluefin ISOs for installation.
 
 - Pre-configured Anaconda installer
 - System flatpaks
@@ -12,8 +12,6 @@ This repository contains the workflows and configuration files needed to build b
 - Secure boot key enrollment
 
 ![ISO go nomnom](https://github.com/user-attachments/assets/2feeb772-713f-40b3-81e8-3f93b157fa13)
-
-
 
 ## ISO Variants
 
