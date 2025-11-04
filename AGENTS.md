@@ -26,9 +26,10 @@ This document provides essential information for coding agents working with the 
 
 ### Key Directories
 - `.github/workflows/` - GitHub Actions CI/CD pipelines for ISO builds
-  - `build-iso-lts.yml` - Builds LTS ISOs (calls reusable workflow)
+  - `build-iso-*.yml` - Caller workflows for specific variants (LTS, GTS, Stable, etc.)
   - `reusable-build-iso-anaconda.yml` - Main ISO build workflow with matrix strategy
   - `validate-flatpaks.yml` - Validates flatpak list files
+  - See "Adding a New ISO Workflow for Custom Images" section for instructions on adding workflows
 - `iso_files/` - ISO configuration and customization scripts
   - `configure_iso_anaconda.sh` - Configures standard ISOs (GTS, Stable, Latest, Beta)
   - `configure_lts_iso_anaconda.sh` - Configures LTS ISOs
@@ -174,6 +175,9 @@ The repository uses mandatory pre-commit validation:
 
 ### GitHub Actions Workflows
 - `build-iso-lts.yml` - Builds LTS ISO images (calls reusable workflow)
+- `build-iso-gts.yml` - Builds GTS ISO images (calls reusable workflow)
+- `build-iso-stable.yml` - Builds Stable ISO images (calls reusable workflow)
+- `build-iso-lts-hwe.yml` - Builds LTS-HWE ISO images (calls reusable workflow)
 - `reusable-build-iso-anaconda.yml` - Core ISO build logic with matrix strategy
   - Builds multiple platform/flavor/version combinations
   - Uses Titanoboa for ISO generation
@@ -181,10 +185,11 @@ The repository uses mandatory pre-commit validation:
 - `validate-flatpaks.yml` - Validates flatpak list files against Flathub
 
 **Workflow Architecture:**
-- LTS workflow calls reusable workflow with specific variants
+- Caller workflows (LTS, GTS, Stable, etc.) call reusable workflow with specific variants
 - Reusable workflow uses matrix strategy for parallel builds
 - Supports workflow dispatch for manual builds
 - Automatically builds on ISO configuration changes
+- **See "Adding a New ISO Workflow for Custom Images" section for instructions on adding new workflows**
 
 ### Manual Validation Steps
 1. `pre-commit run --all-files` - Runs validation hooks
@@ -304,6 +309,373 @@ The `build-iso-lts.yml` is a simple caller:
 - Triggers on workflow dispatch or workflow call
 - Calls reusable workflow with LTS-specific parameters
 - Builds both main and gdx flavors for LTS
+
+## Adding a New ISO Workflow for Custom Images
+
+This section provides step-by-step instructions for creating a new workflow that builds ISOs from custom container images (e.g., `ghcr.io/ublue-os/example:latest`).
+
+### Overview
+
+The repository uses a **reusable workflow pattern** that makes it easy to add new ISO builds:
+1. A **caller workflow** (e.g., `build-iso-custom.yml`) defines what to build
+2. The **reusable workflow** (`reusable-build-iso-anaconda.yml`) handles the actual ISO generation
+3. Both workflows share the same CloudFlare R2 bucket for uploads
+
+### When to Add a New Workflow
+
+Add a new workflow when you want to:
+- Build ISOs from a custom container image not currently supported
+- Create ISOs for experimental or testing purposes
+- Add a new image variant from a different organization or repository
+- Build ISOs with a different image tag or version strategy
+
+### Prerequisites
+
+Before creating a new workflow, ensure:
+1. **Container image exists**: The image must be available at a container registry (e.g., `ghcr.io/ublue-os/example:latest`)
+2. **Image is pullable**: The image must be publicly accessible or credentials must be configured
+3. **Image is compatible**: The image should be based on Fedora/CentOS and compatible with Anaconda installer
+4. **Flatpak lists exist**: Ensure appropriate flatpak lists are available in `flatpaks/` directory
+5. **ISO configuration script exists**: Use existing scripts in `iso_files/` or create new ones if needed
+
+### Step-by-Step Guide
+
+#### Step 1: Understand the Reusable Workflow Inputs
+
+The `reusable-build-iso-anaconda.yml` workflow requires:
+- `image_version` (string, required): Identifier for your custom image (e.g., "custom", "example", "test")
+- `upload_artifacts` (boolean, optional): Whether to upload ISOs as GitHub artifacts (default: false)
+- `upload_r2` (boolean, optional): Whether to upload ISOs to CloudFlare R2 (default: true)
+
+#### Step 2: Modify the Reusable Workflow Matrix
+
+The reusable workflow has a `determine-matrix` job that defines which platform/flavor combinations to build. You need to add your custom image version to this matrix.
+
+**Edit:** `.github/workflows/reusable-build-iso-anaconda.yml`
+
+**Location:** In the `determine-matrix` job, find the case statement around line 52-98 and add a new case for your custom image:
+
+```yaml
+case "${{ inputs.image_version }}" in
+  # ... existing cases ...
+  "custom")
+    # Custom variant: builds ISOs for your custom image
+    # Define which platforms and flavors to build
+    matrix='{"include":[
+      {"platform":"amd64","flavor":"main","image_version":"custom"},
+      {"platform":"arm64","flavor":"main","image_version":"custom"}
+    ]}'
+    ;;
+  # ... rest of cases ...
+esac
+```
+
+**Platform options:**
+- `amd64` - x86_64 architecture (uses `ubuntu-24.04` runner)
+- `arm64` - ARM64 architecture (uses `ubuntu-24.04-arm` runner)
+
+**Flavor options:**
+- `main` - Standard variant
+- `nvidia-open` - NVIDIA open drivers variant
+- `gdx` - Developer (DX) variant with additional tools
+
+**Choose combinations based on your needs.** Most custom images start with just `amd64 × main`.
+
+#### Step 3: Configure Image Reference
+
+The reusable workflow constructs the image reference using environment variables and the Just build system. By default, it uses:
+- `IMAGE_REGISTRY: "ghcr.io/ublue-os"`
+- `IMAGE_NAME: "bluefin"`
+
+**For custom images from different registries/repositories:**
+
+**Option A: Modify the reusable workflow** (if the image is NOT in `ghcr.io/ublue-os/bluefin*` namespace):
+
+Edit the `env` section at the top of `reusable-build-iso-anaconda.yml` to add conditional logic:
+
+```yaml
+env:
+  IMAGE_REGISTRY: ${{ inputs.image_version == 'custom' && 'ghcr.io/custom-org' || 'ghcr.io/ublue-os' }}
+  IMAGE_NAME: ${{ inputs.image_version == 'custom' && 'custom-image' || 'bluefin' }}
+```
+
+**Option B: Use the existing structure** (if the image follows bluefin naming conventions):
+
+The existing Just recipes in `Justfile` already handle image naming. If your image follows the pattern `bluefin-*`, you can reuse the existing logic.
+
+#### Step 4: Create the Caller Workflow
+
+Create a new workflow file that calls the reusable workflow.
+
+**File:** `.github/workflows/build-iso-custom.yml`
+
+**Template:**
+
+```yaml
+---
+name: Build Custom ISOs
+# This workflow builds ISOs from a custom container image
+# Replace "custom" with your actual image identifier
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload ISOs as job artifacts'
+        type: boolean
+        default: false
+      upload_r2:
+        description: 'Upload ISOs to Cloudflare R2'
+        type: boolean
+        default: true
+  schedule:
+    # Optional: Schedule builds (e.g., monthly)
+    - cron: '0 2 1 * *'  # 2am UTC on the 1st of every month
+
+jobs:
+  build-iso-custom:
+    name: Build Custom ISOs
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    secrets: inherit
+    with:
+      image_version: custom  # Must match the case added in step 2
+      upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
+      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+```
+
+**Key configuration points:**
+1. **Name**: Update the workflow name to reflect your custom image
+2. **Triggers**: Configure `workflow_dispatch` for manual builds, optionally add `schedule` for automated builds
+3. **image_version**: Must match exactly the case you added to the reusable workflow matrix
+4. **secrets: inherit**: Required for CloudFlare R2 upload credentials
+
+#### Step 5: Configure ISO Builder and Hooks (If Needed)
+
+The reusable workflow automatically selects:
+- **Builder distro**: `centos` for LTS variants, `fedora` for others
+- **Hook script**: `configure_lts_iso_anaconda.sh` for LTS, `configure_iso_anaconda.sh` for others
+
+**For custom images with special requirements:**
+
+You may need to modify the reusable workflow to use custom hook scripts:
+
+```yaml
+- name: Build ISO
+  id: build
+  uses: ublue-os/titanoboa@main
+  with:
+    image-ref: ${{ steps.image_ref.outputs.image_ref }}:${{ matrix.image_version }}
+    flatpaks-list: ${{ github.workspace }}/flatpaks/system-flatpaks.list
+    hook-post-rootfs: ${{ matrix.image_version == 'custom' && format('{0}/iso_files/configure_custom_iso_anaconda.sh', github.workspace) || ... }}
+    kargs: ${{ steps.image_ref.outputs.kargs }}
+    builder-distro: ${{ matrix.image_version == 'custom' && 'fedora' || ... }}
+```
+
+**Create a custom hook script** if needed:
+1. Copy an existing script: `cp iso_files/configure_iso_anaconda.sh iso_files/configure_custom_iso_anaconda.sh`
+2. Modify as needed for your custom image
+3. Test the hook script for syntax errors: `bash -n iso_files/configure_custom_iso_anaconda.sh`
+
+#### Step 6: Validate and Test
+
+Before committing:
+
+1. **Validate YAML syntax:**
+   ```bash
+   # Install yamllint if not already available
+   pip install yamllint
+   
+   # Validate your workflow file
+   yamllint .github/workflows/build-iso-custom.yml
+   yamllint .github/workflows/reusable-build-iso-anaconda.yml
+   ```
+
+2. **Test in your fork first:**
+   - Push changes to your fork
+   - Trigger via workflow dispatch
+   - Monitor for errors in the Actions tab
+   - Verify ISO builds successfully
+
+3. **Verify outputs:**
+   - Check that ISOs are created with expected names
+   - Verify checksums are generated
+   - Confirm uploads to CloudFlare R2 or artifacts work
+
+#### Step 7: Document Your Changes
+
+Update documentation:
+1. Add comments to your workflow file explaining what it does
+2. Update `README.md` if the custom workflow is intended for general use
+3. Add an entry to this `AGENTS.md` file in the workflow list
+
+### Complete Example: Adding ISOs for `ghcr.io/ublue-os/example:latest`
+
+This example shows how to add a workflow for a custom image at `ghcr.io/ublue-os/example:latest`.
+
+**Step 1:** Add to matrix in `reusable-build-iso-anaconda.yml`:
+
+```yaml
+case "${{ inputs.image_version }}" in
+  # ... existing cases ...
+  "example")
+    # Example custom image: builds amd64 main variant only
+    matrix='{"include":[
+      {"platform":"amd64","flavor":"main","image_version":"example"}
+    ]}'
+    ;;
+```
+
+**Step 2:** Modify image reference (if needed). Since this is in `ghcr.io/ublue-os`, we need to change the `IMAGE_NAME`:
+
+Add conditional logic to the env section:
+
+```yaml
+env:
+  IMAGE_REGISTRY: "ghcr.io/ublue-os"
+  IMAGE_NAME: ${{ inputs.image_version == 'example' && 'example' || 'bluefin' }}
+```
+
+**Or** modify the image_ref step to override:
+
+```yaml
+- name: Format image ref
+  id: image_ref
+  env:
+    FLAVOR: ${{ matrix.flavor }}
+  run: |
+    set -eoux pipefail
+    if [[ "${{ matrix.image_version }}" == "example" ]]; then
+      image_ref="${IMAGE_REGISTRY}/example"
+    else
+      image_name=$(just image_name "bluefin" "${{ matrix.image_version}}" "${{ matrix.flavor}}")
+      image_ref="${IMAGE_REGISTRY}/${image_name}"
+    fi
+    KARGS="NONE"
+    echo "image_ref=$image_ref" >> "${GITHUB_OUTPUT}"
+    echo "artifact_format="example-${{ matrix.image_version }}-$(uname -m)"" >> "${GITHUB_OUTPUT}"
+    echo "kargs=$KARGS" >> "${GITHUB_OUTPUT}"
+```
+
+**Step 3:** Create `build-iso-example.yml`:
+
+```yaml
+---
+name: Build Example ISOs
+# Builds ISOs from ghcr.io/ublue-os/example:latest
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload ISOs as job artifacts'
+        type: boolean
+        default: false
+      upload_r2:
+        description: 'Upload ISOs to Cloudflare R2'
+        type: boolean
+        default: true
+
+jobs:
+  build-iso-example:
+    name: Build Example ISOs
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    secrets: inherit
+    with:
+      image_version: example
+      upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
+      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+```
+
+**Step 4:** Validate and test:
+
+```bash
+# Validate YAML
+yamllint .github/workflows/build-iso-example.yml
+yamllint .github/workflows/reusable-build-iso-anaconda.yml
+
+# Commit and push to fork
+git add .github/workflows/
+git commit -m "feat(ci): add workflow for example ISO builds"
+git push
+
+# Test via GitHub Actions workflow dispatch
+```
+
+### Advanced Configuration
+
+#### Custom Flatpak Lists
+
+To use different flatpaks for your custom image:
+
+1. Create a new flatpak list: `flatpaks/system-flatpaks-custom.list`
+2. Modify the reusable workflow to use it conditionally:
+
+```yaml
+- name: Build ISO
+  uses: ublue-os/titanoboa@main
+  with:
+    flatpaks-list: ${{ matrix.image_version == 'custom' && format('{0}/flatpaks/system-flatpaks-custom.list', github.workspace) || format('{0}/flatpaks/system-flatpaks.list', github.workspace) }}
+```
+
+#### Multiple Platform/Flavor Combinations
+
+To build multiple variants:
+
+```yaml
+"custom")
+  matrix='{"include":[
+    {"platform":"amd64","flavor":"main","image_version":"custom"},
+    {"platform":"amd64","flavor":"nvidia-open","image_version":"custom"},
+    {"platform":"arm64","flavor":"main","image_version":"custom"}
+  ]}'
+  ;;
+```
+
+#### Custom Kernel Arguments
+
+To add kernel arguments for your custom image:
+
+```yaml
+- name: Format image ref
+  run: |
+    # ... existing code ...
+    if [[ "${{ matrix.image_version }}" == "custom" ]]; then
+      KARGS="custom.arg=value another.arg=true"
+    else
+      KARGS="NONE"
+    fi
+    echo "kargs=$KARGS" >> "${GITHUB_OUTPUT}"
+```
+
+### Troubleshooting
+
+**Issue: Matrix not building expected combinations**
+- Check that your case statement in `determine-matrix` matches the `image_version` exactly
+- Verify JSON syntax in matrix definition: `echo '$matrix' | jq .`
+
+**Issue: Image not found**
+- Verify the image exists: `podman pull ghcr.io/ublue-os/example:latest`
+- Check IMAGE_REGISTRY and IMAGE_NAME are correct
+- Ensure the image is publicly accessible or credentials are configured
+
+**Issue: ISO build fails during hook script**
+- Test hook script syntax: `bash -n iso_files/configure_custom_iso_anaconda.sh`
+- Check that packages referenced in hook script are available
+- Review Titanoboa logs for specific errors
+
+**Issue: Upload to R2 fails**
+- Verify secrets are configured: `R2_ACCESS_KEY_ID_2025`, `R2_SECRET_ACCESS_KEY_2025`, `R2_ENDPOINT_2025`
+- Check that `upload_r2` input is set to true
+- Ensure workflow is not running on pull_request (R2 upload is disabled for PRs)
+
+### Best Practices
+
+1. **Start small**: Begin with a single platform/flavor combination
+2. **Test in fork**: Always test new workflows in your fork before opening a PR
+3. **Use workflow_dispatch**: Enable manual triggering for easier testing
+4. **Document thoroughly**: Add clear comments explaining what your workflow does
+5. **Follow naming conventions**: Use consistent naming for workflow files and image versions
+6. **Validate before committing**: Always run YAML validation before pushing
+7. **Monitor resource usage**: ISO builds are resource-intensive; avoid unnecessary builds
+8. **Keep matrix focused**: Only build the platform/flavor combinations you actually need
 
 ## Justfile Structure
 The `Justfile` contains build automation (copied from main Bluefin):
