@@ -22,8 +22,6 @@ jobs:
     name: Build Cosmic ISOs
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
-    permissions:
-      contents: read
     with:
       image_version: cosmic  # Builds Cosmic ISOs from castrojo/bluefin-cosmic:latest
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}

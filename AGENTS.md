@@ -310,6 +310,145 @@ The `build-iso-lts.yml` is a simple caller:
 - Calls reusable workflow with LTS-specific parameters
 - Builds both main and gdx flavors for LTS
 
+### Standard Caller Workflow Pattern
+
+**CRITICAL: All caller workflows MUST follow this exact pattern without deviation.**
+
+All ISO build caller workflows (LTS, GTS, Stable, LTS-HWE, Cosmic, etc.) follow a **strict, consistent structure**. This pattern ensures maintainability, consistency, and proper security configuration.
+
+#### Required Structure
+
+```yaml
+---
+name: Build [Variant] ISOs
+# Comments describing the workflow and what it builds
+# Example: Builds: 2 GTS ISOs
+#   - amd64 × main
+#   - amd64 × nvidia-open
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload ISOs as job artifacts'
+        type: boolean
+        default: false
+      upload_r2:
+        description: 'Upload ISOs to Cloudflare R2'
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0 2 1 * *'  # 2am UTC on the 1st of every month
+
+jobs:
+  build-iso-[variant]:
+    name: Build [Variant] ISOs
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    secrets: inherit
+    with:
+      image_version: [variant]  # Must match case in reusable workflow
+      upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
+      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+```
+
+#### Key Pattern Rules
+
+1. **NO permissions block**: Caller workflows MUST NOT include a `permissions:` block
+   - The reusable workflow handles all permissions internally
+   - Adding permissions can cause conflicts and unexpected behavior
+   - Use `secrets: inherit` to pass secrets to the reusable workflow
+
+2. **Consistent trigger structure**: All workflows use the same triggers
+   - `workflow_dispatch` with `upload_artifacts` and `upload_r2` inputs
+   - `schedule` cron at `'0 2 1 * *'` (monthly on the 1st at 2am UTC)
+
+3. **Single job pattern**: Each caller workflow has exactly one job
+   - Job name follows pattern: `build-iso-[variant]`
+   - Job display name: `Build [Variant] ISOs`
+
+4. **Standard inputs**: All workflows pass the same three inputs to reusable workflow
+   - `image_version`: Identifies which variant to build
+   - `upload_artifacts`: Conditional based on workflow_dispatch input
+   - `upload_r2`: Conditional based on workflow_dispatch input
+
+5. **Consistent formatting**: Maintain alignment and style
+   - Use `secrets: inherit` on its own line
+   - Follow the exact indentation and structure of existing workflows
+
+#### Common Mistakes to Avoid
+
+❌ **DO NOT add a permissions block**
+```yaml
+# WRONG - DO NOT DO THIS
+jobs:
+  build-iso-variant:
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    secrets: inherit
+    permissions:  # ← DO NOT ADD THIS
+      contents: read
+    with:
+      ...
+```
+
+✅ **CORRECT - No permissions block**
+```yaml
+# CORRECT
+jobs:
+  build-iso-variant:
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    secrets: inherit
+    with:
+      ...
+```
+
+❌ **DO NOT use different trigger structures**
+```yaml
+# WRONG - Different inputs or triggers
+on:
+  workflow_dispatch:
+    inputs:
+      custom_input: true  # ← DO NOT ADD CUSTOM INPUTS
+```
+
+✅ **CORRECT - Use standard triggers**
+```yaml
+# CORRECT
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload ISOs as job artifacts'
+        type: boolean
+        default: false
+      upload_r2:
+        description: 'Upload ISOs to Cloudflare R2'
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0 2 1 * *'
+```
+
+#### Verification Checklist
+
+When creating or modifying a caller workflow, verify:
+- [ ] No `permissions:` block exists in the caller workflow
+- [ ] Uses `secrets: inherit` to pass secrets
+- [ ] Has both `workflow_dispatch` and `schedule` triggers
+- [ ] Includes standard `upload_artifacts` and `upload_r2` inputs
+- [ ] Passes exactly three inputs to reusable workflow
+- [ ] Job name follows `build-iso-[variant]` pattern
+- [ ] Formatting and indentation match other caller workflows
+- [ ] Comments describe what ISOs are built
+
+#### Why This Pattern Matters
+
+1. **Security**: Permissions are managed centrally in the reusable workflow
+2. **Consistency**: All workflows behave identically for easier maintenance
+3. **Simplicity**: Caller workflows are thin wrappers with no complex logic
+4. **Inheritance**: Secrets and permissions flow correctly from repository to reusable workflow
+5. **Scalability**: Adding new variants is straightforward and low-risk
+
+**Reference workflows**: See `build-iso-gts.yml`, `build-iso-stable.yml`, `build-iso-lts.yml`, or `build-iso-cosmic.yml` for examples of the correct pattern.
+
 ## Adding a New ISO Workflow for Custom Images
 
 This section provides step-by-step instructions for creating a new workflow that builds ISOs from custom container images (e.g., `ghcr.io/ublue-os/example:latest`).
@@ -447,6 +586,8 @@ jobs:
 2. **Triggers**: Configure `workflow_dispatch` for manual builds, optionally add `schedule` for automated builds
 3. **image_version**: Must match exactly the case you added to the reusable workflow matrix
 4. **secrets: inherit**: Required for CloudFlare R2 upload credentials
+5. **NO permissions block**: Do NOT add a `permissions:` block (see "Standard Caller Workflow Pattern" section above)
+6. **Follow the pattern**: Use the exact structure shown in the "Standard Caller Workflow Pattern" section
 
 #### Step 5: Configure ISO Builder and Hooks (If Needed)
 
