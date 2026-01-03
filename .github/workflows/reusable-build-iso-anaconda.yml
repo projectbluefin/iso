@@ -176,18 +176,21 @@ jobs:
           echo "artifact_format=$artifact_format" >> "${GITHUB_OUTPUT}"
           echo "kargs=$KARGS" >> "${GITHUB_OUTPUT}"
 
-      - name: Add Bazaar to LTS Flatpaks
-        if: matrix.image_version == 'lts' || matrix.image_version == 'lts-hwe'
+      - name: Generate titanoboa-compatible file list
+        id: flatpak_list
         run: |
           set -eoux pipefail
-          echo "app/io.github.kolunmi.Bazaar" >> ${{ github.workspace }}/flatpaks/system-flatpaks.list
+          FILE_LIST="$(mktemp)"
+          git clone https://github.com/projectbluefin/common.git common
+          find common -iname "*system-flatpaks.Brewfile" -exec cat '{}' ';' | grep -v '#' | grep -F -e "flatpak" | sed 's/flatpak //' | tr -d '"' | tee "${FILE_LIST}"
+          echo "file_list_path=${FILE_LIST}" | tee "${GITHUB_OUTPUT}"
 
       - name: Build ISO
         id: build
         uses: ublue-os/titanoboa@main
         with:
           image-ref: ${{ steps.image_ref.outputs.image_ref }}:${{ matrix.image_version }}
-          flatpaks-list: ${{ github.workspace }}/flatpaks/system-flatpaks.list
+          flatpaks-list: ${{ steps.flatpak_list.outputs.file_list_path }}
           hook-post-rootfs: ${{ (matrix.image_version == 'lts' || matrix.image_version == 'lts-hwe') && format('{0}/iso_files/configure_lts_iso_anaconda.sh', github.workspace) || format('{0}/iso_files/configure_iso_anaconda.sh', github.workspace) }}
           kargs: ${{ steps.image_ref.outputs.kargs }}
           builder-distro: ${{ (matrix.image_version == 'lts' || matrix.image_version == 'lts-hwe') && 'centos' || 'fedora' }}
