@@ -10,9 +10,6 @@ sbkey='https://github.com/ublue-os/akmods/raw/main/certs/public_key.der'
 
 # Configure Live Environment
 
-# Remove packages from liveCD to save space
-dnf remove -y ublue-brew ublue-motd || true
-
 # Setup dock
 tee /usr/share/glib-2.0/schemas/zz2-org.gnome.shell.gschema.override <<EOF
 [org.gnome.shell]
@@ -141,10 +138,10 @@ sed -i 's| Fedora| Bluefin|' /usr/share/anaconda/gnome/fedora-welcome || true
 sed -i 's|Activities|in the dock|' /usr/share/anaconda/gnome/fedora-welcome || true
 
 # Get Artwork
-git clone --depth=1 https://github.com/ublue-os/packages.git /root/packages
+git clone --depth=1 https://github.com/projectbluefin/branding.git /tmp/branding
 mkdir -p /usr/share/anaconda/pixmaps/silverblue
-cp -r /root/packages/bluefin/fedora-logos/src/anaconda/* /usr/share/anaconda/pixmaps/silverblue/
-rm -rf /root/packages
+cp -r /tmp/branding/anaconda/* /usr/share/anaconda/pixmaps/silverblue/
+rm -rf /tmp/branding
 
 # Interactive Kickstart
 tee -a /usr/share/anaconda/interactive-defaults.ks <<EOF
