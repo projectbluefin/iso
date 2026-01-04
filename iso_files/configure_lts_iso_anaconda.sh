@@ -199,4 +199,4 @@ EOF
 # %end
 # EOF
 
-sed -i "s@Welcome to.*@Welcome to Bluefin@g" /usr/share/applications/org.fedoraproject.welcome-screen.desktop
+sed -i -e "s/Fedora/Bluefin/g" -e "s/CentOS/Bluefin/g" /usr/share/applications/org.fedoraproject.welcome-screen.desktop
