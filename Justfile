@@ -882,3 +882,12 @@ retag-nvidia-on-ghcr working_tag="" stream="" dry_run="1":
     for image in bluefin-nvidia-open bluefin-dx-nvidia-open; do
       $skopeo copy docker://ghcr.io/ublue-os/${image}:{{ working_tag }} docker://ghcr.io/ublue-os/${image}:{{ stream }}
     done
+
+# Build a local ISO using Titanoboa
+# Arguments:
+#   flavor: base, dx, gdx
+#   repo: local, ghcr
+# Usage: just local-iso <flavor> <repo>
+[group('ISO')]
+local-iso flavor="base" repo="ghcr":
+    hack/local-iso-build.sh {{flavor}} {{repo}}
