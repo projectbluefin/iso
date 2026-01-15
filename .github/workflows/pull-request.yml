@@ -1,0 +1,28 @@
+name: ISO Build PR Check
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+
+jobs:
+  build-iso-lts:
+    name: Build LTS ISOs
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    with:
+      image_version: lts
+      upload_r2: false
+      upload_artifacts: false
+    secrets: inherit
+
+  build-iso-stable:
+    name: Build Stable ISOs
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    with:
+      image_version: stable
+      image_tag: latest
+      upload_r2: false
+      upload_artifacts: false
+    secrets: inherit
