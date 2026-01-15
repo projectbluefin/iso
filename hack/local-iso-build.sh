@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Script to build Bluefin LTS images using the Titanoboa builder
-# Usage: local-iso-build.sh <flavor> <repo> [hook_script] [flatpaks_file]
+# Usage: local-iso-build.sh <variant> <flavor> <repo> [hook_script] [flatpaks_file]
 #   flavor: base, dx, gdx
 #   repo: local, ghcr
 #   hook_script: optional post_rootfs hook script (default: iso_files/configure_lts_iso_anaconda.sh)
@@ -15,14 +15,23 @@ IMAGE_NAME="${IMAGE_NAME:-bluefin}"
 # Resolve repo root (assuming script is in hack/)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Bluefin LTS is based on CentOS Stream
-IMAGE_DISTRO="centos"
-variant="lts"
+variant="${1:-lts}"
+flavor="${2:-base}"
+repo="${3:-ghcr}"
 
-flavor="${1:-base}"
-repo="${2:-ghcr}"
-hook_script="${3:-$REPO_ROOT/iso_files/configure_lts_iso_anaconda.sh}"
-flatpaks_file="${4:-$REPO_ROOT/flatpaks/system-flatpaks.list}"
+if [ "$variant" == "lts" ]; then
+    IMAGE_DISTRO="centos"
+    DEFAULT_HOOK="$REPO_ROOT/iso_files/configure_lts_iso_anaconda.sh"
+elif [ "$variant" == "bluefin" ]; then
+    IMAGE_DISTRO="fedora"
+    DEFAULT_HOOK="$REPO_ROOT/iso_files/configure_iso_anaconda.sh"
+else
+    echo "Error: Unknown variant '$variant'. Supported variants: lts, bluefin"
+    exit 1
+fi
+
+hook_script="${4:-$DEFAULT_HOOK}"
+flatpaks_source="${5:-https://raw.githubusercontent.com/projectbluefin/common/refs/heads/main/system_files/bluefin/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile}"
 
 # Verify hook script exists
 if [ ! -f "$hook_script" ]; then
@@ -57,7 +66,7 @@ echo -e "  \033[1;32mRepo:\033[0m          $repo"
 echo -e "  \033[1;32mImage Distro:\033[0m  $IMAGE_DISTRO"
 echo -e "  \033[1;32mImage Name:\033[0m    $TARGET_IMAGE_NAME"
 echo -e "  \033[1;32mHook Script:\033[0m   $hook_script"
-echo -e "  \033[1;32mFlatpaks File:\033[0m $flatpaks_file"
+echo -e "  \033[1;32mFlatpaks Source:\033[0m $flatpaks_source"
 echo -e "\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n"
 
 # Clean up any previous copy of Titanoboa that might have sudo permissions
@@ -73,11 +82,26 @@ if [ ! -d "$BUILD_DIR" ]; then
 fi
 
 # Handle flatpaks file
-echo "Copying flatpaks file to $BUILD_DIR directory..."
-if [ -f "$flatpaks_file" ]; then
-	cp "$flatpaks_file" "$BUILD_DIR/flatpaks.list"
+echo "Setting up flatpaks list..."
+if [ -f "$flatpaks_source" ]; then
+    echo "Using local flatpaks file: $flatpaks_source"
+    cp "$flatpaks_source" "$BUILD_DIR/flatpaks.list"
+elif [[ "$flatpaks_source" =~ ^https?:// ]]; then
+    echo "Fetching flatpaks from URL: $flatpaks_source"
+    if curl -sL "$flatpaks_source" -o "$BUILD_DIR/flatpaks.raw"; then
+        # Check if it's a Brewfile and parse it
+        if grep -q '^flatpak "' "$BUILD_DIR/flatpaks.raw"; then
+            echo "Detected Brewfile format, parsing..."
+            grep '^flatpak ' "$BUILD_DIR/flatpaks.raw" | awk -F'"' '{print $2}' > "$BUILD_DIR/flatpaks.list"
+        else
+            mv "$BUILD_DIR/flatpaks.raw" "$BUILD_DIR/flatpaks.list"
+        fi
+    else
+        echo "Warning: Failed to fetch flatpaks list, creating empty list."
+        touch "$BUILD_DIR/flatpaks.list"
+    fi
 else
-    echo "Warning: Flatpaks file not found, creating empty list."
+    echo "Warning: Flatpaks source '$flatpaks_source' not found, creating empty list."
     touch "$BUILD_DIR/flatpaks.list"
 fi
 

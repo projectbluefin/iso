@@ -42,7 +42,7 @@ systemctl disable rpm-ostreed-automatic.timer
 systemctl disable uupd.timer
 systemctl disable ublue-system-setup.service
 # systemctl disable ublue-guest-user.service
-systemctl disable check-sb-key.service
+# systemctl disable check-sb-key.service
 # systemctl --global disable ublue-flatpak-manager.service
 systemctl --global disable podman-auto-update.timer
 systemctl --global disable ublue-user-setup.service
@@ -54,20 +54,17 @@ dnf remove -y anaconda-liveinst
 
 # Install Anaconda, Webui if >= F42
 SPECS=(
-    "libdnf5"
-    "python3-libdnf5"
     "libblockdev"
     "libblockdev-lvm"
     "libblockdev-dm"
-    "libblockdev-btrfs"
     "anaconda-live"
-    "anaconda-webui-49"
+    "anaconda-webui"
     "firefox"
 )
 
-dnf copr enable -y jreilly1821/anaconda-webui
+dnf copr enable -y jreilly1821/anaconda-webui-f43
 
-dnf install -y "${SPECS[@]}"
+dnf install -y --allowerasing --nobest "${SPECS[@]}"
 
 
 # Fix the wrong dir for webui
