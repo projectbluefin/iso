@@ -62,7 +62,7 @@ SPECS=(
     "firefox"
 )
 
-dnf copr enable -y jreilly1821/anaconda-webui
+dnf copr enable -y jreilly1821/anaconda-webui-f43
 
 dnf install -y --allowerasing --nobest "${SPECS[@]}"
 
