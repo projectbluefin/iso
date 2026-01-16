@@ -42,7 +42,7 @@ systemctl disable rpm-ostreed-automatic.timer
 systemctl disable uupd.timer
 systemctl disable ublue-system-setup.service
 # systemctl disable ublue-guest-user.service
-systemctl disable check-sb-key.service
+# systemctl disable check-sb-key.service
 # systemctl --global disable ublue-flatpak-manager.service
 systemctl --global disable podman-auto-update.timer
 systemctl --global disable ublue-user-setup.service
@@ -54,20 +54,37 @@ dnf remove -y anaconda-liveinst
 
 # Install Anaconda, Webui if >= F42
 SPECS=(
-    "libdnf5"
-    "python3-libdnf5"
     "libblockdev"
     "libblockdev-lvm"
     "libblockdev-dm"
-    "libblockdev-btrfs"
     "anaconda-live"
-    "anaconda-webui-49"
+    "anaconda-webui"
     "firefox"
 )
 
 dnf copr enable -y jreilly1821/anaconda-webui
 
-dnf install -y "${SPECS[@]}"
+dnf install -y --allowerasing --nobest "${SPECS[@]}"
+
+# Build and install custom bootc v1.12.1
+echo "Building bootc v1.12.1 from source..."
+dnf install -y dnf-plugins-core epel-release
+dnf config-manager --set-enabled crb
+dnf install -y git cargo openssl-devel libzstd-devel glib2-devel gcc ostree-devel
+
+git clone --branch v1.12.1 --depth 1 https://github.com/bootc-dev/bootc.git /tmp/bootc
+pushd /tmp/bootc
+cargo build --release
+cp target/release/bootc /usr/bin/bootc
+popd
+
+# Verify bootc version
+/usr/bin/bootc --version
+
+# Cleanup build artifacts and dependencies to reduce image size
+rm -rf /tmp/bootc
+dnf remove -y git cargo openssl-devel libzstd-devel glib2-devel gcc ostree-devel
+dnf autoremove -y
 
 
 # Fix the wrong dir for webui
