@@ -57,6 +57,7 @@ SPECS=(
     "libblockdev"
     "libblockdev-lvm"
     "libblockdev-dm"
+    "anaconda"
     "anaconda-live"
     "anaconda-webui"
     "firefox"
