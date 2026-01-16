@@ -59,12 +59,19 @@ SPECS=(
     "libblockdev-dm"
     "anaconda-live"
     "anaconda-webui"
+    "anaconda-webui"
     "firefox"
+    "openssh-server"
 )
 
 dnf copr enable -y jreilly1821/anaconda-webui
 
 dnf install -y --allowerasing --nobest "${SPECS[@]}"
+
+# Enable SSHD for debugging
+systemctl enable sshd
+echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+echo "root:universalblue" | chpasswd
 
 # Build and install custom bootc latest release
 echo "Building bootc latest release from source..."
