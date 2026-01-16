@@ -125,9 +125,9 @@ cd "$BUILD_DIR"
 echo "Running Titanoboa build..."
 sudo TITANOBOA_BUILDER_DISTRO="$IMAGE_DISTRO" \
 	HOOK_post_rootfs="hook.sh" \
-	just build "$TARGET_IMAGE_NAME" 1 flatpaks.list
+    just build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
 
-echo "Titanoboa build completed successfully!"
+echo "Titanoboa build process finished."
 
 # Locate and Move ISO
 ISO_PATH="$BUILD_DIR/output.iso"
