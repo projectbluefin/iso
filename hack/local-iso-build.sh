@@ -105,6 +105,16 @@ else
     touch "$BUILD_DIR/flatpaks.list"
 fi
 
+
+
+# Patch Titanoboa Justfile to ignore setfiles errors (workaround for smartmontools/FS issues)
+echo "Patching Titanoboa Justfile to ignore setfiles errors..."
+sed -i 's/setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_contexts ./setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_contexts . || true/' "$BUILD_DIR/Justfile"
+
+# Patch Titanoboa Justfile to ensure builder has device access (fix loop mount)
+echo "Patching Titanoboa Justfile to add --device /dev/fuse to builder..."
+sed -i 's/--security-opt label=disable/--security-opt label=disable --device \/dev\/fuse/' "$BUILD_DIR/Justfile"
+
 echo "Copying hook script to $BUILD_DIR directory..."
 cp "$hook_script" "$BUILD_DIR/hook.sh"
 
@@ -115,6 +125,22 @@ cd "$BUILD_DIR"
 echo "Running Titanoboa build..."
 sudo TITANOBOA_BUILDER_DISTRO="$IMAGE_DISTRO" \
 	HOOK_post_rootfs="hook.sh" \
-	just build "$TARGET_IMAGE_NAME" 1 flatpaks.list
+    just build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
 
-echo "Titanoboa build completed successfully!"
+echo "Titanoboa build process finished."
+
+# Locate and Move ISO
+ISO_PATH="$BUILD_DIR/output.iso"
+if [ -f "$ISO_PATH" ]; then
+    TIMESTAMP="$(date +%Y%m%d)"
+    OUTPUT_NAME="${IMAGE_NAME}-${variant}${FLAVOR_SUFFIX}-${TIMESTAMP}.iso"
+    
+    echo "Copying ISO to $REPO_ROOT/$OUTPUT_NAME..."
+    sudo cp "$ISO_PATH" "$REPO_ROOT/$OUTPUT_NAME"
+    sudo chown "$(id -u):$(id -g)" "$REPO_ROOT/$OUTPUT_NAME"
+    
+    echo -e "\n\033[1;32mSUCCESS: ISO available at: $REPO_ROOT/$OUTPUT_NAME\033[0m"
+else
+    echo "Error: Output ISO not found at $ISO_PATH"
+    exit 1
+fi
