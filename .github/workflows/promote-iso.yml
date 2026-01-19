@@ -1,1 +1,9 @@
-# Your updated YAML content goes here
+# Other workflow content
+...
+- name: Deploy to ISO
+  env:
+    R2_ACCESS_KEY_ID_PRODTEST: ${{ secrets.R2_ACCESS_KEY_ID_PRODTEST }}
+    R2_SECRET_ACCESS_KEY_PRODTEST: ${{ secrets.R2_SECRET_ACCESS_KEY_PRODTEST }}
+    R2_ENDPOINT_PRODTEST: ${{ secrets.R2_ENDPOINT_PRODTEST }}
+# Other workflow content
+...
