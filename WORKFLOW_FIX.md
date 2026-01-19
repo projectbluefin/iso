@@ -53,7 +53,7 @@ All tests passed successfully:
 
 - ✅ YAML syntax validation for all 8 workflow files
 - ✅ Reusable workflow structure validation
-- ✅ Individual workflow structure validation (lts, lts-hwe, gts, stable)
+- ✅ Individual workflow structure validation (lts, lts-hwe, stable)
 - ✅ Orchestrator workflow structure validation (build-iso-all)
 - ✅ Matrix generation logic validation
 - ✅ Conditional upload logic validation
@@ -65,10 +65,9 @@ All tests passed successfully:
 |----------|------------|-----------|---------|
 | lts      | 4          | amd64, arm64 | main, gdx |
 | lts-hwe  | 2          | amd64, arm64 | main |
-| gts      | 2          | amd64     | main, nvidia-open |
 | stable   | 2          | amd64     | main, nvidia-open |
-| all      | 10         | All above | All above |
-| PR       | 4          | amd64     | gts + stable only |
+| all      | 8          | All above | All above |
+| PR       | 2          | amd64     | stable only |
 
 ## Next Steps for Repository Maintainers
 
@@ -96,7 +95,6 @@ Trigger any variant individually:
 # Or via gh CLI:
 gh workflow run build-iso-lts.yml
 gh workflow run build-iso-lts-hwe.yml
-gh workflow run build-iso-gts.yml
 gh workflow run build-iso-stable.yml
 ```
 

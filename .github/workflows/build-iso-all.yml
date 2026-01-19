@@ -4,9 +4,8 @@ name: Build All ISOs
 # Each individual workflow builds ONLY its own specific ISOs:
 #   - build-iso-lts      → 4 LTS ISOs only
 #   - build-iso-lts-hwe  → 2 LTS-HWE ISOs only
-#   - build-iso-gts      → 2 GTS ISOs only
 #   - build-iso-stable   → 2 Stable ISOs only
-# Total: 10 ISOs across all variants
+# Total: 8 ISOs across all variants
 on:
   workflow_dispatch:
     inputs:
@@ -45,16 +44,6 @@ jobs:
     secrets: inherit
     with:
       image_version: lts-hwe  # Strictly LTS-HWE only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
-      upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
-
-  build-iso-gts:
-    name: Build GTS ISOs
-    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
-    secrets: inherit
-    with:
-      image_version: gts  # Strictly GTS only
       image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}

@@ -45,15 +45,15 @@ The ISO build system consists of independent, focused workflows that can be trig
           └────────┬────────┘
                    │
 ┌─────────────────────┐  ┌─────────────────────┐
-│  build-iso-gts      │  │  build-iso-stable   │
+│  build-iso-lts-hwe  │  │  build-iso-stable   │
 │                     │  │                     │
 │ ✓ workflow_dispatch │  │ ✓ workflow_dispatch │
 │ ✓ schedule (cron)   │  │ ✓ schedule (cron)   │
 │ ✓ upload options    │  │ ✓ upload options    │
 │                     │  │                     │
-│ Builds: GTS ISOs    │  │ Builds: Stable ISOs │
+│ Builds: LTS-HWE ISOs│  │ Builds: Stable ISOs │
 │ - amd64 × main      │  │ - amd64 × main      │
-│ - amd64 × nvidia-open│ │ - amd64 × nvidia-open│
+│ - arm64 × main      │  │ - amd64 × nvidia-open│
 └─────────┬───────────┘  └─────────┬───────────┘
           │                        │
           └────────┬───────────────┘
@@ -78,10 +78,9 @@ The ISO build system consists of independent, focused workflows that can be trig
 │ ✓ schedule (cron)                                           │
 │ ✓ upload options                                            │
 │                                                              │
-│ Orchestrates all 4 workflows in parallel:                   │
+│ Orchestrates all 3 workflows in parallel:                   │
 │ ├─► build-iso-lts                                           │
 │ ├─► build-iso-lts-hwe                                       │
-│ ├─► build-iso-gts                                           │
 │ └─► build-iso-stable                                        │
 └─────────────────────────────────────────────────────────────┘
 
@@ -90,10 +89,9 @@ Schedule: All workflows run at 2am UTC on the 1st of each month
 
 ### Key Features
 - **Strict ISO Scoping:** Each workflow builds ONLY its designated ISOs - no cross-contamination
-  - `build-iso-lts.yml` → **LTS ISOs only** (never builds GTS, Stable, or LTS-HWE)
-  - `build-iso-lts-hwe.yml` → **LTS-HWE ISOs only** (never builds GTS, Stable, or LTS)
-  - `build-iso-gts.yml` → **GTS ISOs only** (never builds LTS, LTS-HWE, or Stable)
-  - `build-iso-stable.yml` → **Stable ISOs only** (never builds LTS, LTS-HWE, or GTS)
+  - `build-iso-lts.yml` → **LTS ISOs only** (never builds Stable or LTS-HWE)
+  - `build-iso-lts-hwe.yml` → **LTS-HWE ISOs only** (never builds Stable or LTS)
+  - `build-iso-stable.yml` → **Stable ISOs only** (never builds LTS or LTS-HWE)
 - **Independent Execution:** Each workflow can run independently without affecting others
 - **Orchestration:** The "Build All ISOs" workflow calls all others in parallel
 - **Flexible Upload:** Control artifact and R2 uploads per execution
@@ -104,10 +102,7 @@ Schedule: All workflows run at 2am UTC on the 1st of each month
 The following ISO variants are built:
 
 ### Standard Releases
-- **GTS (Grand Touring Support)** - Stable release with extended support
 - **Stable** - Current stable release
-- **Latest** - Latest features and updates
-- **Beta** - Pre-release testing builds
 
 ### LTS Releases
 - **LTS** - Long-term support based on CentOS Stream
@@ -115,7 +110,7 @@ The following ISO variants are built:
 
 Each variant supports multiple flavors:
 - `main` - Standard Bluefin
-- `nvidia-open` - With NVIDIA open drivers (GTS/Stable only)
+- `nvidia-open` - With NVIDIA open drivers (Stable only)
 - `gdx` - Bluefin DX for developers (LTS only)
 
 ## Building ISOs
@@ -128,11 +123,10 @@ Each workflow is **strictly scoped** to build only its designated ISO variant:
 
 | Workflow File | Builds | Does NOT Build |
 |---------------|--------|----------------|
-| `build-iso-lts.yml` | **4 LTS ISOs only**<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ GTS<br/>❌ Stable<br/>❌ LTS-HWE |
-| `build-iso-lts-hwe.yml` | **2 LTS-HWE ISOs only**<br/>- amd64 × main<br/>- arm64 × main | ❌ GTS<br/>❌ Stable<br/>❌ LTS |
-| `build-iso-gts.yml` | **2 GTS ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE<br/>❌ Stable |
-| `build-iso-stable.yml` | **2 Stable ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE<br/>❌ GTS |
-| `build-iso-all.yml` | All 10 ISOs (calls all 4 workflows above) | N/A - orchestrator |
+| `build-iso-lts.yml` | **4 LTS ISOs only**<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ Stable<br/>❌ LTS-HWE |
+| `build-iso-lts-hwe.yml` | **2 LTS-HWE ISOs only**<br/>- amd64 × main<br/>- arm64 × main | ❌ Stable<br/>❌ LTS |
+| `build-iso-stable.yml` | **2 Stable ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE |
+| `build-iso-all.yml` | All 8 ISOs (calls all 3 workflows above) | N/A - orchestrator |
 
 This strict separation ensures:
 - ✅ Predictable builds: You know exactly which ISOs each workflow produces
@@ -146,7 +140,6 @@ Trigger individual workflow dispatches for specific variants:
 2. Select a workflow:
    - "Build LTS ISOs" - for LTS variant
    - "Build LTS-HWE ISOs" - for LTS-HWE variant
-   - "Build GTS ISOs" - for GTS variant
    - "Build Stable ISOs" - for Stable variant
    - "Build All ISOs" - to build all variants
 3. Click "Run workflow"
@@ -166,7 +159,6 @@ ISOs are built automatically:
 ├── .github/workflows/       # GitHub Actions workflows
 │   ├── build-iso-lts.yml   # LTS ISO build workflow
 │   ├── build-iso-lts-hwe.yml  # LTS-HWE ISO build workflow
-│   ├── build-iso-gts.yml   # GTS ISO build workflow
 │   ├── build-iso-stable.yml  # Stable ISO build workflow
 │   ├── build-iso-all.yml   # Orchestrates all ISO builds
 │   ├── reusable-build-iso-anaconda.yml  # Core reusable ISO build workflow
@@ -222,7 +214,7 @@ just fix
 ### Local ISO Build
 ```bash
 # Build an ISO locally
-just build-iso bluefin gts main
+just build-iso bluefin stable main
 
 # Build using GHCR image
 just build-iso-ghcr bluefin stable main
@@ -236,7 +228,7 @@ Built ISOs are uploaded to:
 
 ISO naming format: `{image-name}-{version}-{arch}.iso`
 
-Example: `bluefin-gts-x86_64.iso`
+Example: `bluefin-stable-x86_64.iso`
 
 ## ISO Release Pipeline
 
@@ -245,7 +237,7 @@ The repository uses a two-stage release pipeline with testing and production buc
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    ISO Build Workflows                       │
-│              (build-iso-lts, gts, stable, etc.)              │
+│              (build-iso-lts, stable, lts-hwe)                │
 └───────────────────────────┬─────────────────────────────────┘
                             │
                             ▼
@@ -289,7 +281,7 @@ The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing 
 2. Click **"Run workflow"**
 3. Configure inputs:
    - **variant**: Select which ISOs to promote:
-     - `stable` - Promotes GTS and Stable ISOs only
+     - `stable` - Promotes Stable ISOs only
      - `lts` - Promotes LTS, LTS-HWE, and GDX ISOs only
      - `all` - Promotes all ISOs (use with caution)
    - **dry_run**: ✅ Keep checked (default: `true`)
@@ -311,7 +303,7 @@ The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing 
 
 | Variant | ISOs Promoted | Use Case |
 |---------|--------------|----------|
-| **stable** | • GTS ISOs (`*-gts-*.iso*`)<br/>• Stable ISOs (`*-stable-*.iso*`) | Regular stable release cycle |
+| **stable** | • Stable ISOs (`*-stable-*.iso*`) | Regular stable release cycle |
 | **lts** | • LTS ISOs (`*-lts-*.iso*`)<br/>• LTS-HWE ISOs (`*-lts-hwe-*.iso*`)<br/>• GDX ISOs (`*-dx-lts-*.iso*`) | LTS release cycle |
 | **all** | • All ISOs (`*.iso`)<br/>• All checksums (`*.iso-CHECKSUM`) | Major releases or bulk updates |
 
@@ -334,7 +326,7 @@ The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing 
 # 2. Run promotion workflow:
 #    - variant: stable
 #    - dry_run: true
-# 3. Review output - confirm GTS and Stable ISOs will be promoted
+# 3. Review output - confirm Stable ISOs will be promoted
 # 4. Run again:
 #    - variant: stable
 #    - dry_run: false

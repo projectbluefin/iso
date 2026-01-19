@@ -70,13 +70,6 @@ jobs:
                   {"platform":"arm64","flavor":"main","image_version":"lts-hwe"}
                 ]}'
                 ;;
-              "gts")
-                # GTS variant: builds ONLY GTS ISOs (2 total)
-                matrix='{"include":[
-                  {"platform":"amd64","flavor":"main","image_version":"gts"},
-                  {"platform":"amd64","flavor":"nvidia-open","image_version":"gts"}
-                ]}'
-                ;;
               "stable")
                 # Stable variant: builds ONLY Stable ISOs (2 total)
                 matrix='{"include":[
@@ -87,8 +80,6 @@ jobs:
               "all")
                 # "all" is reserved for testing - builds all variants
                 matrix='{"include":[
-                  {"platform":"amd64","flavor":"main","image_version":"gts"},
-                  {"platform":"amd64","flavor":"nvidia-open","image_version":"gts"},
                   {"platform":"amd64","flavor":"main","image_version":"stable"},
                   {"platform":"amd64","flavor":"nvidia-open","image_version":"stable"},
                   {"platform":"amd64","flavor":"main","image_version":"lts"},
@@ -102,10 +93,8 @@ jobs:
             esac
           else
             # Default for when image_version is not provided (e.g., pull_request triggers)
-            # Build GTS and Stable only for faster PR validation
+            # Build Stable only for faster PR validation
             matrix='{"include":[
-              {"platform":"amd64","flavor":"main","image_version":"gts"},
-              {"platform":"amd64","flavor":"nvidia-open","image_version":"gts"},
               {"platform":"amd64","flavor":"main","image_version":"stable"},
               {"platform":"amd64","flavor":"nvidia-open","image_version":"stable"}
             ]}'
