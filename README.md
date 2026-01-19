@@ -231,12 +231,116 @@ just build-iso-ghcr bluefin stable main
 ## Output
 
 Built ISOs are uploaded to:
-- CloudFlare R2 storage (for release builds)
-- GitHub Actions artifacts (for testing/workflow dispatch builds)
+- CloudFlare R2 `testing` bucket (for automatic builds)
+- GitHub Actions artifacts (for pull request builds)
 
 ISO naming format: `{image-name}-{version}-{arch}.iso`
 
 Example: `bluefin-gts-x86_64.iso`
+
+## ISO Release Pipeline
+
+The repository uses a two-stage release pipeline with testing and production buckets:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ISO Build Workflows                       │
+│              (build-iso-lts, gts, stable, etc.)              │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │    Testing    │
+                    │    Bucket     │  ← Automatic builds
+                    │   (testing)   │
+                    └───────┬───────┘
+                            │
+                            │  Manual promotion
+                            │  with variant selection
+                            ▼
+                ┌───────────────────────┐
+                │   Promote ISOs to     │
+                │   Production Workflow │
+                └───────────┬───────────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │  Production   │
+                    │    Bucket     │  ← Controlled release
+                    │  (prodtest)   │
+                    └───────────────┘
+```
+
+### Promoting ISOs to Production
+
+The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing to production.
+
+#### When to Promote
+
+- After verifying ISOs in the testing bucket
+- When ready to release specific variants to users
+- Before announcing new ISO availability
+
+#### Promotion Workflow Steps
+
+**Step 1: Preview Changes (Dry Run)**
+
+1. Navigate to **Actions → Promote ISOs to Production**
+2. Click **"Run workflow"**
+3. Configure inputs:
+   - **variant**: Select which ISOs to promote:
+     - `stable` - Promotes GTS and Stable ISOs only
+     - `lts` - Promotes LTS, LTS-HWE, and GDX ISOs only
+     - `all` - Promotes all ISOs (use with caution)
+   - **dry_run**: ✅ Keep checked (default: `true`)
+4. Click **"Run workflow"**
+5. Review the workflow output to see what files would be promoted
+
+**Step 2: Execute Promotion**
+
+1. After verifying the dry run output looks correct
+2. Run the workflow again with same settings
+3. Configure inputs:
+   - **variant**: Same selection as dry run
+   - **dry_run**: ❌ Uncheck (set to `false`)
+4. Click **"Run workflow"**
+5. ISOs will be copied from `testing` to `prodtest` bucket
+6. Verify the promotion in the workflow output
+
+#### Variant Selection Details
+
+| Variant | ISOs Promoted | Use Case |
+|---------|--------------|----------|
+| **stable** | • GTS ISOs (`*-gts-*.iso*`)<br/>• Stable ISOs (`*-stable-*.iso*`) | Regular stable release cycle |
+| **lts** | • LTS ISOs (`*-lts-*.iso*`)<br/>• LTS-HWE ISOs (`*-lts-hwe-*.iso*`)<br/>• GDX ISOs (`*-dx-lts-*.iso*`) | LTS release cycle |
+| **all** | • All ISOs (`*.iso`)<br/>• All checksums (`*.iso-CHECKSUM`) | Major releases or bulk updates |
+
+#### Important Notes
+
+- **Dry run is enabled by default** - Always preview before promoting
+- **rclone sync is used** - Files in testing will mirror to production:
+  - New files are copied
+  - Updated files are replaced
+  - Files not in testing (matching the filter) are removed from production
+- **Selective promotion** - Promote stable and LTS independently
+- **Checksums included** - `.iso-CHECKSUM` files are automatically included
+
+#### Example Workflow
+
+```bash
+# Scenario: Releasing new Stable ISOs
+
+# 1. Verify ISOs built successfully in testing bucket
+# 2. Run promotion workflow:
+#    - variant: stable
+#    - dry_run: true
+# 3. Review output - confirm GTS and Stable ISOs will be promoted
+# 4. Run again:
+#    - variant: stable
+#    - dry_run: false
+# 5. ISOs are now in production bucket
+# 6. Announce availability to users
+```
 
 ## Contributing
 
