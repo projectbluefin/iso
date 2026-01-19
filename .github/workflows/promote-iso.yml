@@ -1,9 +1,93 @@
-# Other workflow content
-...
-- name: Deploy to ISO
-  env:
-    R2_ACCESS_KEY_ID_PRODTEST: ${{ secrets.R2_ACCESS_KEY_ID_PRODTEST }}
-    R2_SECRET_ACCESS_KEY_PRODTEST: ${{ secrets.R2_SECRET_ACCESS_KEY_PRODTEST }}
-    R2_ENDPOINT_PRODTEST: ${{ secrets.R2_ENDPOINT_PRODTEST }}
-# Other workflow content
-...
+---
+name: Promote ISOs to Production
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Which ISOs to promote'
+        required: true
+        type: choice
+        default: 'stable'
+        options:
+          - stable
+          - lts
+          - all
+      dry_run:
+        description: 'Run in dry-run mode (preview changes without copying)'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.variant }} ISOs to Production
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Test Bucket Config (Source) - using R2 2025 credentials
+      RCLONE_CONFIG_R2_TEST_TYPE: s3
+      RCLONE_CONFIG_R2_TEST_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_TEST_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID_2025 }}
+      RCLONE_CONFIG_R2_TEST_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY_2025 }}
+      RCLONE_CONFIG_R2_TEST_REGION: auto
+      RCLONE_CONFIG_R2_TEST_ENDPOINT: ${{ secrets.R2_ENDPOINT_2025 }}
+
+      # Production Bucket Config (Destination) - using dedicated production credentials
+      RCLONE_CONFIG_R2_PROD_TYPE: s3
+      RCLONE_CONFIG_R2_PROD_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_PROD_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID_PRODTEST }}
+      RCLONE_CONFIG_R2_PROD_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY_PRODTEST }}
+      RCLONE_CONFIG_R2_PROD_REGION: auto
+      RCLONE_CONFIG_R2_PROD_ENDPOINT: ${{ secrets.R2_ENDPOINT_PRODTEST }}
+
+    steps:
+      - name: Install rclone
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
+
+      - name: Determine filter pattern
+        id: filter
+        run: |
+          case "${{ inputs.variant }}" in
+            stable)
+              echo "filter=--include *-gts-*.iso* --include *-stable-*.iso*" >> $GITHUB_OUTPUT
+              ;;
+            lts)
+              echo "filter=--include *-lts-*.iso* --include *-lts-hwe-*.iso* --include *-dx-lts-*.iso*" >> $GITHUB_OUTPUT
+              ;;
+            all)
+              echo "filter=--include *.iso --include *.iso-CHECKSUM" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: List files in Test bucket
+        run: |
+          echo "Files in Test bucket matching variant '${{ inputs.variant }}':"
+          rclone ls R2_TEST:testing ${{ steps.filter.outputs.filter }}
+
+      - name: Promote ISOs (Dry Run)
+        if: inputs.dry_run == true
+        run: |
+          echo "Running in DRY RUN mode - no files will be copied"
+          rclone sync R2_TEST:testing R2_PROD:prodtest \
+            ${{ steps.filter.outputs.filter }} \
+            --dry-run \
+            --verbose
+
+      - name: Promote ISOs (Production)
+        if: inputs.dry_run == false
+        run: |
+          echo "Promoting ISOs from Test to Production"
+          rclone sync R2_TEST:testing R2_PROD:prodtest \
+            ${{ steps.filter.outputs.filter }} \
+            --verbose \
+            --progress
+
+      - name: Verify promotion
+        if: inputs.dry_run == false
+        run: |
+          echo "Files in Production bucket after promotion:"
+          rclone ls R2_PROD:prodtest ${{ steps.filter.outputs.filter }}
