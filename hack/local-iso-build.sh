@@ -134,11 +134,11 @@ ISO_PATH="$BUILD_DIR/output.iso"
 if [ -f "$ISO_PATH" ]; then
     TIMESTAMP="$(date +%Y%m%d)"
     OUTPUT_NAME="${IMAGE_NAME}-${variant}${FLAVOR_SUFFIX}-${TIMESTAMP}.iso"
-    
+
     echo "Copying ISO to $REPO_ROOT/$OUTPUT_NAME..."
     sudo cp "$ISO_PATH" "$REPO_ROOT/$OUTPUT_NAME"
     sudo chown "$(id -u):$(id -g)" "$REPO_ROOT/$OUTPUT_NAME"
-    
+
     echo -e "\n\033[1;32mSUCCESS: ISO available at: $REPO_ROOT/$OUTPUT_NAME\033[0m"
 else
     echo "Error: Output ISO not found at $ISO_PATH"

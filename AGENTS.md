@@ -26,12 +26,12 @@ This document provides essential information for coding agents working with the 
 
 ### Key Directories
 - `.github/workflows/` - GitHub Actions CI/CD pipelines for ISO builds
-  - `build-iso-*.yml` - Caller workflows for specific variants (LTS, GTS, Stable, etc.)
+  - `build-iso-*.yml` - Caller workflows for specific variants (LTS, LTS-HWE, Stable)
   - `reusable-build-iso-anaconda.yml` - Main ISO build workflow with matrix strategy
   - `validate-flatpaks.yml` - Validates flatpak list files
   - See "Adding a New ISO Workflow for Custom Images" section for instructions on adding workflows
 - `iso_files/` - ISO configuration and customization scripts
-  - `configure_iso_anaconda.sh` - Configures standard ISOs (GTS, Stable, Latest, Beta)
+  - `configure_iso_anaconda.sh` - Configures standard ISOs (Stable)
   - `configure_lts_iso_anaconda.sh` - Configures LTS ISOs
   - `bluefin.repo` - Generated COPR repository file (not committed)
   - `README.md` - Notes about ISO files
@@ -45,15 +45,12 @@ This document provides essential information for coding agents working with the 
 
 ### ISO Variants and Architecture
 - **ISO Variants**:
-  - `gts` - Grand Touring Support (stable with extended support)
   - `stable` - Current stable release
-  - `latest` - Latest features (may be beta/unstable)
-  - `beta` - Pre-release testing builds
   - `lts` - Long-term support based on CentOS Stream
   - `lts-hwe` - LTS with hardware enablement kernel
 - **Image Flavors**:
   - `main` - Standard Bluefin (all variants)
-  - `nvidia-open` - With NVIDIA open drivers (GTS/Stable only)
+  - `nvidia-open` - With NVIDIA open drivers (Stable only)
   - `gdx` - Bluefin DX for developers (LTS only)
 - **Platforms**: `amd64` (x86_64) and `arm64` (aarch64)
 - **Base Container Images**: Pulled from `ghcr.io/ublue-os/bluefin*` or `ghcr.io/projectbluefin/bluefin*`
@@ -94,13 +91,13 @@ just fix
 **Local ISO builds (requires significant resources):**
 ```bash
 # Build ISO from local container image
-just build-iso bluefin gts main
+just build-iso bluefin stable main
 
 # Build ISO from GHCR (recommended for testing)
 just build-iso-ghcr bluefin stable main
 
 # Run ISO in VM for testing
-just run-iso bluefin gts main
+just run-iso bluefin stable main
 ```
 
 **Utility commands:**
@@ -112,7 +109,7 @@ just clean
 just --list
 
 # Validate image/tag/flavor combinations
-just validate bluefin gts main
+just validate bluefin stable main
 ```
 
 ### Critical ISO Build Notes
@@ -175,7 +172,6 @@ The repository uses mandatory pre-commit validation:
 
 ### GitHub Actions Workflows
 - `build-iso-lts.yml` - Builds LTS ISO images (calls reusable workflow)
-- `build-iso-gts.yml` - Builds GTS ISO images (calls reusable workflow)
 - `build-iso-stable.yml` - Builds Stable ISO images (calls reusable workflow)
 - `build-iso-lts-hwe.yml` - Builds LTS-HWE ISO images (calls reusable workflow)
 - `reusable-build-iso-anaconda.yml` - Core ISO build logic with matrix strategy
@@ -185,7 +181,7 @@ The repository uses mandatory pre-commit validation:
 - `validate-flatpaks.yml` - Validates flatpak list files against Flathub
 
 **Workflow Architecture:**
-- Caller workflows (LTS, GTS, Stable, etc.) call reusable workflow with specific variants
+- Caller workflows (LTS, LTS-HWE, Stable) call reusable workflow with specific variants
 - Reusable workflow uses matrix strategy for parallel builds
 - Supports workflow dispatch for manual builds
 - Automatically builds on ISO configuration changes
@@ -202,7 +198,7 @@ The repository uses mandatory pre-commit validation:
 ### ISO Configuration Scripts
 Located in `iso_files/`, these scripts customize the live environment and Anaconda installer:
 
-**`configure_iso_anaconda.sh`** (for GTS, Stable, Latest, Beta):
+**`configure_iso_anaconda.sh`** (for Stable):
 - Removes unnecessary packages from live CD
 - Configures GNOME dock with installer shortcuts
 - Disables sleep/suspend during installation
@@ -285,7 +281,7 @@ The `reusable-build-iso-anaconda.yml` is the core workflow:
 Dynamically generates matrix based on input:
 - **Platforms**: amd64 (x86_64), arm64 (aarch64)
 - **Flavors**: main, nvidia-open, gdx
-- **Variants**: gts, stable, latest, beta, lts, lts-hwe
+- **Variants**: stable, lts, lts-hwe
 
 **Build process:**
 1. Determine matrix based on variant selection
@@ -314,7 +310,7 @@ The `build-iso-lts.yml` is a simple caller:
 
 **CRITICAL: All caller workflows MUST follow this exact pattern without deviation.**
 
-All ISO build caller workflows (LTS, GTS, Stable, LTS-HWE, etc.) follow a **strict, consistent structure**. This pattern ensures maintainability, consistency, and proper security configuration.
+All ISO build caller workflows (LTS, LTS-HWE, Stable) follow a **strict, consistent structure**. This pattern ensures maintainability, consistency, and proper security configuration.
 
 #### Required Structure
 
@@ -322,7 +318,7 @@ All ISO build caller workflows (LTS, GTS, Stable, LTS-HWE, etc.) follow a **stri
 ---
 name: Build [Variant] ISOs
 # Comments describing the workflow and what it builds
-# Example: Builds: 2 GTS ISOs
+# Example: Builds: 2 Stable ISOs
 #   - amd64 × main
 #   - amd64 × nvidia-open
 on:
@@ -447,7 +443,7 @@ When creating or modifying a caller workflow, verify:
 4. **Inheritance**: Secrets and permissions flow correctly from repository to reusable workflow
 5. **Scalability**: Adding new variants is straightforward and low-risk
 
-**Reference workflows**: See `build-iso-gts.yml`, `build-iso-stable.yml`, or `build-iso-lts.yml` for examples of the correct pattern.
+**Reference workflows**: See `build-iso-stable.yml` or `build-iso-lts.yml` for examples of the correct pattern.
 
 ## Adding a New ISO Workflow for Custom Images
 
@@ -825,7 +821,7 @@ The `Justfile` contains build automation (copied from main Bluefin):
 - `repo_organization` - GitHub organization
 - `images` - Image name mappings
 - `flavors` - Flavor mappings (main, nvidia-open, gdx)
-- `tags` - Tag/variant mappings (gts, stable, latest, beta, lts, lts-hwe)
+- `tags` - Tag/variant mappings (stable, latest, beta, lts, lts-hwe)
 
 **ISO-related recipes:**
 - `build-iso` - Build ISO from local or GHCR image
@@ -876,8 +872,8 @@ This is a focused repository for ISO building. The main complexity is in the wor
 
 Understanding the differences between Standard and LTS configurations is critical:
 
-| Aspect | Standard (GTS/Stable/Latest/Beta) | LTS (lts/lts-hwe) |
-|--------|-----------------------------------|-------------------|
+| Aspect | Standard (Stable) | LTS (lts/lts-hwe) |
+|--------|-------------------|-------------------|
 | **Base OS** | Fedora Linux | CentOS Stream |
 | **Filesystem** | BTRFS with compression | XFS |
 | **Builder Distro** | Fedora | CentOS |
@@ -943,7 +939,6 @@ just clean
 ### Matrix Variants
 - **lts:** amd64/arm64 × main/gdx
 - **lts-hwe:** amd64/arm64 × main
-- **gts:** amd64 × main/nvidia-open
 - **stable:** amd64 × main/nvidia-open
 - **all:** All combinations
 

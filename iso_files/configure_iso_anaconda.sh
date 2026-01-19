@@ -127,11 +127,7 @@ fi
 
 # Configure
 . /etc/os-release
-if [[ "$IMAGE_TAG" =~ gts ]]; then
-    echo "Bluefin ${IMAGE_TAG^^} release $VERSION_ID (${VERSION_CODENAME:=Big Bird})" >/etc/system-release
-else
-    echo "Bluefin release $VERSION_ID ($VERSION_CODENAME)" >/etc/system-release
-fi
+echo "Bluefin release $VERSION_ID ($VERSION_CODENAME)" >/etc/system-release
 sed -i 's/ANACONDA_PRODUCTVERSION=.*/ANACONDA_PRODUCTVERSION=""/' /usr/{,s}bin/liveinst || true
 sed -i 's|^Icon=.*|Icon=/usr/share/pixmaps/fedora-logo-icon.png|' /usr/share/applications/liveinst.desktop || true
 sed -i 's| Fedora| Bluefin|' /usr/share/anaconda/gnome/fedora-welcome || true

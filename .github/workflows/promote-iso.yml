@@ -53,7 +53,7 @@ jobs:
         run: |
           case "${{ inputs.variant }}" in
             stable)
-              echo "filter=--include *-gts-*.iso* --include *-stable-*.iso*" >> $GITHUB_OUTPUT
+              echo "filter=--include *-stable-*.iso*" >> $GITHUB_OUTPUT
               ;;
             lts)
               echo "filter=--include *-lts-*.iso* --include *-lts-hwe-*.iso* --include *-dx-lts-*.iso*" >> $GITHUB_OUTPUT
