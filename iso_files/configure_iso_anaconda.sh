@@ -74,7 +74,7 @@ if [[ "$IMAGE_TAG" =~ lts ]]; then
 elif [[ "$(rpm -E %fedora)" -ge 42 ]]; then
     SPECS+=("anaconda-webui")
 fi
-dnf install -y "${SPECS[@]}"
+dnf install -y "${SPECS[@]}" -x fedora-logos
 
 dnf config-manager --set-disabled centos-hyperscale &>/dev/null || true
 
