@@ -211,6 +211,14 @@ jobs:
           if-no-files-found: error
           path: ${{ steps.rename.outputs.output_directory }}
 
+      - name: Set up Homebrew
+        if: inputs.upload_r2 && github.event_name != 'pull_request'
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install rclone
+        if: inputs.upload_r2 && github.event_name != 'pull_request'
+        run: brew install rclone
+
       - name: Upload to CloudFlare
         if: inputs.upload_r2 && github.event_name != 'pull_request'
         shell: bash
@@ -223,6 +231,4 @@ jobs:
           RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_2025 }}
           SOURCE_DIR: ${{ steps.rename.outputs.output_directory }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y rclone
           rclone copy --log-level INFO --checksum "${SOURCE_DIR}" R2:testing
