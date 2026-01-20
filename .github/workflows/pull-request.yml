@@ -22,7 +22,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     with:
       image_version: stable
-      image_tag: latest
+      image_tag: stable
       upload_r2: false
       upload_artifacts: false
     secrets: inherit
