@@ -11,9 +11,9 @@ on:
         description: 'Image tag to build from'
         type: choice
         options:
-          - lts
-          - testing
-        default: lts
+          - lts-hwe
+          - lts-hwe-testing
+        default: lts-hwe
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
         type: boolean
