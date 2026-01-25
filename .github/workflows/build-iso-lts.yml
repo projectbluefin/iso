@@ -14,7 +14,7 @@ on:
         type: choice
         options:
           - lts
-          - testing
+          - lts-testing
         default: lts
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
