@@ -113,7 +113,7 @@ sed -i 's/setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_conte
 
 # Patch Titanoboa Justfile to ensure builder has device access (fix loop mount)
 echo "Patching Titanoboa Justfile to add --device /dev/fuse to builder..."
-sed -i 's/--security-opt label=disable/--security-opt label=disable --device \/dev\/fuse/' "$BUILD_DIR/Justfile"
+sed -i 's/--security-opt label=disable/--security-opt label=disable --device \/dev\/fuse --device \/dev\/loop-control --device \/dev\/loop0/' "$BUILD_DIR/Justfile"
 
 echo "Copying hook script to $BUILD_DIR directory..."
 cp "$hook_script" "$BUILD_DIR/hook.sh"
