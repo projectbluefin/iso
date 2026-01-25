@@ -1,4 +1,4 @@
-    #!/usr/bin/env bash
+#!/usr/bin/env bash
 
 set -eoux pipefail
 
@@ -67,35 +67,7 @@ SPECS=(
 
 dnf copr enable -y jreilly1821/anaconda-webui
 
-dnf install -y --allowerasing --nobest "${SPECS[@]}"
-
-# Enable SSHD for debugging
-systemctl enable sshd
-echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
-echo "root:universalblue" | chpasswd
-
-# Build and install custom bootc latest release
-echo "Building bootc latest release from source..."
-dnf install -y dnf-plugins-core epel-release
-dnf config-manager --set-enabled crb
-dnf install -y git cargo openssl-devel libzstd-devel glib2-devel gcc ostree-devel curl jq
-
-# Get latest bootc release
-LATEST_BOOTC_RELEASE=$(curl -s https://api.github.com/repos/bootc-dev/bootc/releases/latest | jq -r .tag_name)
-git clone --branch "$LATEST_BOOTC_RELEASE" --depth 1 https://github.com/bootc-dev/bootc.git /tmp/bootc
-pushd /tmp/bootc
-cargo build --release
-cp target/release/bootc /usr/bin/bootc
-popd
-
-# Verify bootc version
-/usr/bin/bootc --version | grep "$LATEST_BOOTC_RELEASE" || { echo "bootc version is not $LATEST_BOOTC_RELEASE"; exit 1; }
-
-# Cleanup build artifacts and dependencies to reduce image size
-rm -rf /tmp/bootc
-dnf remove -y git cargo openssl-devel libzstd-devel glib2-devel gcc ostree-devel
-dnf autoremove -y
-
+dnf install -y --nobest --allowerasing "${SPECS[@]}"
 
 # Fix the wrong dir for webui
 sed -i 's|/usr/libexec/webui-desktop|/usr/libexec/anaconda/webui-desktop|g' /bin/liveinst
