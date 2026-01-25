@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+    #!/usr/bin/env bash
 
 set -eoux pipefail
 
@@ -99,6 +99,10 @@ dnf autoremove -y
 
 # Fix the wrong dir for webui
 sed -i 's|/usr/libexec/webui-desktop|/usr/libexec/anaconda/webui-desktop|g' /bin/liveinst
+
+# HOTFIX: Fix Blivet/Dasbus import error in Anaconda Storage Module. We need to bump Blivet
+sed -i "s/from blivet.safe_dbus import SafeDBusError/from dasbus.error import DBusError as SafeDBusError/g" /usr/lib64/python3.12/site-packages/pyanaconda/modules/storage/iscsi/discover.py
+
 
 # Anaconda Profile Detection
 
