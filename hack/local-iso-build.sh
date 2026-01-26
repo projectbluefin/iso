@@ -161,8 +161,6 @@ sed -i "s|--volume ' + git_root + ':/app|--volume ' + git_root + ':/app $MOUNT_A
 DAKOTA_IMAGE_ARG=""
 [[ "$ENABLE_DAKOTA" == "true" ]] && DAKOTA_IMAGE_ARG="ghcr.io/projectbluefin/dakota:latest"
 
-# Patch rootfs recipe: run optimize-dnf.sh immediately after extraction
-sed -i "/ln -sr {{ rootfs }}\/tmp {{ rootfs }}\/var\/tmp/a \    {{ PODMAN }} run --rm --privileged -v {{ git_root }}:/app --rootfs {{ git_root }}/{{ rootfs }} /usr/bin/bash /app/optimize-dnf.sh" "$BUILD_DIR/Justfile"
 
 # Inject layer optimization script
 sed -i "s|dnf install -y flatpak|dnf install -y flatpak podman skopeo \&\& /usr/bin/bash /app/optimize-iso-build.sh $TARGET_IMAGE_NAME $DAKOTA_IMAGE_ARG|" "$BUILD_DIR/Justfile"
@@ -176,7 +174,6 @@ sed -i 's/chroot "$(cat '"'"'{{ hook }}'"'"')"/export ENABLE_DAKOTA='"$ENABLE_DA
 
 echo "Copying scripts to $BUILD_DIR..."
 cp "$hook_script" "$BUILD_DIR/hook.sh"
-cp "$REPO_ROOT/hack/optimize-dnf.sh" "$BUILD_DIR/optimize-dnf.sh"
 cp "$REPO_ROOT/hack/optimize-iso-build.sh" "$BUILD_DIR/optimize-iso-build.sh"
 cp "$REPO_ROOT/iso_files/dakota-install.sh" "$BUILD_DIR/dakota-install.sh"
 

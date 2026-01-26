@@ -59,7 +59,7 @@ if [[ ${#STORES[@]} -gt 0 ]]; then
                 echo "  Checking host store: $store"
                 # Correct skopeo syntax for custom containers-storage:
                 # containers-storage:[driver@root]image
-                if skopeo copy "containers-storage:[overlay@$store]$img" "containers-storage:$img"; then
+                if skopeo copy --remove-signatures "containers-storage:[overlay@$store]$img" "containers-storage:$img"; then
                     echo "  Success: $img realized from $store"
                     SUCCESS=1
                     break

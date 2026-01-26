@@ -19,6 +19,10 @@ on:
         description: 'Enable Dakota'
         type: boolean
         default: false
+      image_tag:
+        description: 'Image tag to build from'
+        type: string
+        default: stable
   schedule:
     - cron: '0 2 1 * *'  # 2am UTC on the 1st of every month
 
@@ -29,7 +33,7 @@ jobs:
     secrets: inherit
     with:
       image_version: stable  # Strictly builds Stable ISOs only
-      image_tag: stable
+      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'stable' }}
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
       enable_dakota: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_dakota || false }}

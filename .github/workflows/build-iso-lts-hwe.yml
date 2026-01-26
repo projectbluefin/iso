@@ -9,10 +9,7 @@ on:
     inputs:
       image_tag:
         description: 'Image tag to build from'
-        type: choice
-        options:
-          - lts
-          - testing
+        type: string
         default: lts
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
