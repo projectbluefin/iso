@@ -89,7 +89,7 @@ Schedule: All workflows run at 2am UTC on the 1st of each month
 
 ### Key Features
 - **Strict ISO Scoping:** Each workflow builds ONLY its designated ISOs - no cross-contamination
-  - `build-iso-lts.yml` → **LTS ISOs only** (never builds Stable or LTS-HWE)
+  - `build-iso-lts.yml` → **LTS ISOs only** (never builds Stable or LTS-HWE) - currently OFF since Anaconda is not working on LTS versions so we are keeping older working ISOs in the bucket
   - `build-iso-lts-hwe.yml` → **LTS-HWE ISOs only** (never builds Stable or LTS)
   - `build-iso-stable.yml` → **Stable ISOs only** (never builds LTS or LTS-HWE)
 - **Independent Execution:** Each workflow can run independently without affecting others
