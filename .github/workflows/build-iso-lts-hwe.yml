@@ -9,8 +9,11 @@ on:
     inputs:
       image_tag:
         description: 'Image tag to build from'
-        type: string
-        default: lts
+        type: choice
+        options:
+          - lts-hwe
+          - lts-hwe-testing
+        default: lts-hwe
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
         type: boolean
