@@ -19,6 +19,10 @@ name: Reusable Build
         description: 'Upload ISOs to Cloudflare R2'
         type: boolean
         default: true
+      enable_dakota:
+        description: 'Enable Dakota'
+        type: boolean
+        default: false
     secrets:
       R2_ACCESS_KEY_ID_2025:
         required: false
@@ -187,6 +191,8 @@ jobs:
           hook-post-rootfs: ${{ (matrix.image_version == 'lts' || matrix.image_version == 'lts-hwe') && format('{0}/iso_files/configure_lts_iso_anaconda.sh', github.workspace) || format('{0}/iso_files/configure_iso_anaconda.sh', github.workspace) }}
           kargs: ${{ steps.image_ref.outputs.kargs }}
           builder-distro: ${{ (matrix.image_version == 'lts' || matrix.image_version == 'lts-hwe') && 'centos' || 'fedora' }}
+        env:
+          ENABLE_DAKOTA: ${{ inputs.enable_dakota }}
 
       - name: Rename ISO
         id: rename

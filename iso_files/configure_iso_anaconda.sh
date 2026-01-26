@@ -205,3 +205,20 @@ echo -e "$ENROLLMENT_PASSWORD\n$ENROLLMENT_PASSWORD" | mokutil --import "$SECURE
 EOF
 
 sed -i -e "s/Fedora/Bluefin/g" -e "s/CentOS/Bluefin/g" /usr/share/anaconda/gnome/org.fedoraproject.welcome-screen.desktop
+
+# Dakota Install Script
+if [[ "${ENABLE_DAKOTA:-false}" == "true" ]]; then
+    echo "Adding dakota-install script (Advanced)..."
+    if [ -f "/app/dakota-install.sh" ]; then
+        cp /app/dakota-install.sh /usr/bin/dakota-install
+        chmod +x /usr/bin/dakota-install
+    else
+        echo "Error: /app/dakota-install.sh not found!"
+        exit 1
+    fi
+
+    echo "Pre-pulling Dakota image..."
+    podman pull ghcr.io/projectbluefin/dakota:latest || echo "Warning: Failed to pre-pull Dakota image."
+else
+    echo "Dakota installer disabled for this variant."
+fi

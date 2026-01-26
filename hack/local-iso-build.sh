@@ -57,11 +57,22 @@ else
 	exit 1
 fi
 
+# Determine if Dakota should be enabled
+ENABLE_DAKOTA="false"
+if [[ "$variant" == "bluefin" ]]; then
+    # Fedora-based Bluefin stable
+    ENABLE_DAKOTA="true"
+elif [[ "$variant" == "lts" && "$flavor" == "hwe" ]]; then
+    # LTS HWE
+    ENABLE_DAKOTA="true"
+fi
+
 echo -e "\n\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 echo -e "\033[1;33m                        Building with Titanoboa\033[0m"
 echo -e "\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 echo -e "  \033[1;32mVariant:\033[0m       $variant"
 echo -e "  \033[1;32mFlavor:\033[0m        $flavor"
+echo -e "  \033[1;32mENABLE_DAKOTA:\033[0m $ENABLE_DAKOTA"
 echo -e "  \033[1;32mRepo:\033[0m          $repo"
 echo -e "  \033[1;32mImage Distro:\033[0m  $IMAGE_DISTRO"
 echo -e "  \033[1;32mImage Name:\033[0m    $TARGET_IMAGE_NAME"
@@ -105,40 +116,88 @@ else
     touch "$BUILD_DIR/flatpaks.list"
 fi
 
+# Pre-pull images on host to leverage local cache
+echo "Pre-pulling images on host to optimize build..."
+if podman image exists "$TARGET_IMAGE_NAME"; then
+    echo "Image $TARGET_IMAGE_NAME found locally, skipping pull."
+else
+    echo "Image $TARGET_IMAGE_NAME not found locally. Pulling..."
+    podman pull "$TARGET_IMAGE_NAME" || echo "Warning: Failed to pre-pull $TARGET_IMAGE_NAME"
+fi
+if [[ "$ENABLE_DAKOTA" == "true" ]]; then
+    if podman image exists ghcr.io/projectbluefin/dakota:latest; then
+        echo "Dakota image found locally, skipping pull."
+    else
+        echo "Dakota image not found locally. Pulling..."
+        podman pull ghcr.io/projectbluefin/dakota:latest || echo "Warning: Failed to pre-pull Dakota image"
+    fi
+fi
 
 
-# Patch Titanoboa Justfile to ignore setfiles errors (workaround for smartmontools/FS issues)
-echo "Patching Titanoboa Justfile to ignore setfiles errors..."
+
+# Patch Titanoboa Justfile to ignore setfiles errors
 sed -i 's/setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_contexts ./setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_contexts . || true/' "$BUILD_DIR/Justfile"
 
-# Patch Titanoboa Justfile to ensure builder has device access (fix loop mount)
-echo "Patching Titanoboa Justfile to add --device /dev/fuse to builder..."
-sed -i 's/--security-opt label=disable/--security-opt label=disable --device \/dev\/fuse --device \/dev\/loop-control --device \/dev\/loop0/' "$BUILD_DIR/Justfile"
+# Detect host container storage paths
+ROOTLESS_STORAGE=$(podman info --format '{{.Store.GraphRoot}}' 2>/dev/null || true)
+ROOTFUL_STORAGE="/var/lib/containers/storage"
 
-echo "Copying hook script to $BUILD_DIR directory..."
+# Build mount arguments for host storage
+MOUNT_ARGS=""
+if [[ -d "$ROOTFUL_STORAGE" ]]; then
+    echo "Detected host rootful storage: $ROOTFUL_STORAGE"
+    MOUNT_ARGS+=" --volume $ROOTFUL_STORAGE:/host-container-storage-rootful:rw"
+fi
+if [[ -n "$ROOTLESS_STORAGE" && -d "$ROOTLESS_STORAGE" ]]; then
+    echo "Detected host rootless storage: $ROOTLESS_STORAGE"
+    MOUNT_ARGS+=" --volume $ROOTLESS_STORAGE:/host-container-storage-rootless:rw"
+fi
+
+# 2. Add devices (for builder) and volumes (for both builder and chroot)
+echo "Patching Titanoboa Justfile with mounts and permissions..."
+sed -i "s|--security-opt label=disable|--security-opt label=disable --device /dev/fuse --device /dev/loop-control --device /dev/loop0|" "$BUILD_DIR/Justfile"
+sed -i "s|--volume ' + git_root + ':/app|--volume ' + git_root + ':/app $MOUNT_ARGS --volume /var/lib/flatpak/repo:/host-flatpak-repo:ro|" "$BUILD_DIR/Justfile"
+
+DAKOTA_IMAGE_ARG=""
+[[ "$ENABLE_DAKOTA" == "true" ]] && DAKOTA_IMAGE_ARG="ghcr.io/projectbluefin/dakota:latest"
+
+# Patch rootfs recipe: run optimize-dnf.sh immediately after extraction
+sed -i "/ln -sr {{ rootfs }}\/tmp {{ rootfs }}\/var\/tmp/a \    {{ PODMAN }} run --rm --privileged -v {{ git_root }}:/app --rootfs {{ git_root }}/{{ rootfs }} /usr/bin/bash /app/optimize-dnf.sh" "$BUILD_DIR/Justfile"
+
+# Inject layer optimization script
+sed -i "s|dnf install -y flatpak|dnf install -y flatpak podman skopeo \&\& /usr/bin/bash /app/optimize-iso-build.sh $TARGET_IMAGE_NAME $DAKOTA_IMAGE_ARG|" "$BUILD_DIR/Justfile"
+
+# Add flatpak summary debug
+sed -i '/xargs "-i{}" -d "\\n" sh -c/i \    echo "--- Flatpak Install Summary ---" \&\& flatpak list --columns=application,size \&\& echo "------------------------------"' "$BUILD_DIR/Justfile"
+
+# 4. Export ENABLE_DAKOTA to chroot environments
+# Using single quotes for the sed expression to avoid shell expansion issues
+sed -i 's/chroot "$(cat '"'"'{{ hook }}'"'"')"/export ENABLE_DAKOTA='"$ENABLE_DAKOTA"' \&\& chroot "$(cat '"'"'{{ hook }}'"'"')"/g' "$BUILD_DIR/Justfile"
+
+echo "Copying scripts to $BUILD_DIR..."
 cp "$hook_script" "$BUILD_DIR/hook.sh"
-
-# Change to the $BUILD_DIR directory
-cd "$BUILD_DIR"
+cp "$REPO_ROOT/hack/optimize-dnf.sh" "$BUILD_DIR/optimize-dnf.sh"
+cp "$REPO_ROOT/hack/optimize-iso-build.sh" "$BUILD_DIR/optimize-iso-build.sh"
+cp "$REPO_ROOT/iso_files/dakota-install.sh" "$BUILD_DIR/dakota-install.sh"
 
 # Run the Titanoboa build command
+cd "$BUILD_DIR"
 echo "Running Titanoboa build..."
 sudo TITANOBOA_BUILDER_DISTRO="$IMAGE_DISTRO" \
-	HOOK_post_rootfs="hook.sh" \
-    just build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
+     HOOK_post_rootfs="hook.sh" \
+     ENABLE_DAKOTA="$ENABLE_DAKOTA" \
+     just build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
 
 echo "Titanoboa build process finished."
 
-# Locate and Move ISO
+# Locate and move the resulting ISO
 ISO_PATH="$BUILD_DIR/output.iso"
-if [ -f "$ISO_PATH" ]; then
+if [[ -f "$ISO_PATH" ]]; then
     TIMESTAMP="$(date +%Y%m%d)"
     OUTPUT_NAME="${IMAGE_NAME}-${variant}${FLAVOR_SUFFIX}-${TIMESTAMP}.iso"
-
-    echo "Copying ISO to $REPO_ROOT/$OUTPUT_NAME..."
+    echo "Moving ISO to $REPO_ROOT/$OUTPUT_NAME..."
     sudo cp "$ISO_PATH" "$REPO_ROOT/$OUTPUT_NAME"
     sudo chown "$(id -u):$(id -g)" "$REPO_ROOT/$OUTPUT_NAME"
-
     echo -e "\n\033[1;32mSUCCESS: ISO available at: $REPO_ROOT/$OUTPUT_NAME\033[0m"
 else
     echo "Error: Output ISO not found at $ISO_PATH"

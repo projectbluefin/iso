@@ -15,6 +15,10 @@ on:
         description: 'Upload ISOs to Cloudflare R2'
         type: boolean
         default: true
+      enable_dakota:
+        description: 'Enable Dakota'
+        type: boolean
+        default: false
   schedule:
     - cron: '0 2 1 * *'  # 2am UTC on the 1st of every month
 
@@ -28,3 +32,4 @@ jobs:
       image_tag: stable
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+      enable_dakota: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_dakota || false }}

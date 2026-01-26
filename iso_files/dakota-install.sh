@@ -1,40 +1,33 @@
 #!/usr/bin/env bash
 set -e
 
-# Ensure gum is installed
-if ! command -v gum &> /dev/null; then
-    echo "Error: gum is not installed. Please install it first."
-    exit 1
-fi
+# Configuration
+MAPPER_NAME="cryptroot"
+BOOT_LABEL="BOOT"
+ROOT_LABEL="ROOT"
+BOOT_SIZE="2G"
+MOUNT_POINT="/mnt"
+IMAGE="ghcr.io/projectbluefin/dakota:latest"
 
-echo "--- Dakota Standalone Installer ---"
+# Ensure dependencies are installed
+DEPS=(gum cryptsetup mkfs.btrfs mkfs.fat sgdisk podman lsblk)
+for dep in "${DEPS[@]}"; do
+    if ! command -v "$dep" &> /dev/null; then
+        echo "Error: $dep is not installed."
+        exit 1
+    fi
+done
 
-# Identify the installer disk (best effort)
-# In many live environments, the ISO is mounted via a loop device or directly from a USB.
-# We can try to find the disk containing the label 'Fedora', 'Bluefin', or 'ANACONDA'
-INSTALLER_DISK=$(lsblk -rnlo NAME,LABEL,TYPE | grep -E "Fedora|Bluefin|ANACONDA" | grep "part" | head -n1 | cut -d' ' -f1 | sed 's/[0-9]*$//')
-if [ -z "$INSTALLER_DISK" ]; then
-    # Fallback: check where /run/initramfs/live is mounted if it exists
-    INSTALLER_DISK=$(lsblk -no PKNAME $(df /run/initramfs/live 2>/dev/null | tail -n1 | awk '{print $1}') 2>/dev/null)
-fi
+echo "--- Dakota Advanced Installer (LUKS + Btrfs) ---"
 
-echo "Identifying available disks..."
-
-# List disks excluding zram and potentially the installer disk
+# Identify available disks
 MAPFILE_DISKS=()
 while IFS= read -r line; do
     NAME=$(echo "$line" | awk '{print $1}')
     SIZE=$(echo "$line" | awk '{print $2}')
     MODEL=$(echo "$line" | awk '{$1=$2=""; print $0}' | sed 's/^[ \t]*//')
-    
-    # Skip zram
     [[ "$NAME" == zram* ]] && continue
-    
-    DISPLAY_NAME="$NAME ($SIZE) - $MODEL"
-    if [[ "$NAME" == "$INSTALLER_DISK" ]]; then
-        DISPLAY_NAME="$DISPLAY_NAME [INSTALLER DISK - WARNING]"
-    fi
-    MAPFILE_DISKS+=("$DISPLAY_NAME")
+    MAPFILE_DISKS+=("$NAME ($SIZE) - $MODEL")
 done < <(lsblk -nlo NAME,SIZE,MODEL,TYPE | grep disk)
 
 if [ ${#MAPFILE_DISKS[@]} -eq 0 ]; then
@@ -42,56 +35,102 @@ if [ ${#MAPFILE_DISKS[@]} -eq 0 ]; then
     exit 1
 fi
 
-echo "Select target disk for Dakota installation:"
+echo "Select target disk:"
 SELECTED_DISPLAY=$(printf "%s\n" "${MAPFILE_DISKS[@]}" | gum choose)
+[ -z "$SELECTED_DISPLAY" ] && exit 1
 
-if [ -z "$SELECTED_DISPLAY" ]; then
-    echo "No disk selected. Exiting."
-    exit 1
-fi
+DISK=$(echo "$SELECTED_DISPLAY" | awk '{print $1}')
+[[ "$DISK" != /dev/* ]] && DISK="/dev/$DISK"
 
-SELECTED_DISK=$(echo "$SELECTED_DISPLAY" | awk '{print $1}')
+PART_PREFIX=""
+[[ "$DISK" =~ "nvme" || "$DISK" =~ "mmcblk" ]] && PART_PREFIX="p"
 
-if [[ "$SELECTED_DISK" == "$INSTALLER_DISK" ]]; then
-    gum confirm "WARNING: You have selected the installer disk ($SELECTED_DISK). Are you sure you want to proceed? This will likely destroy the installer media." || exit 1
-else
-    gum confirm "Are you sure you want to install Dakota to $SELECTED_DISK? THIS WILL WIPE THE DISK!" || exit 1
-fi
+DEV_BOOT="${DISK}${PART_PREFIX}1"
+DEV_ROOT="${DISK}${PART_PREFIX}2"
+MAPPER="/dev/mapper/$MAPPER_NAME"
 
-echo "Proceeding with installation to /dev/$SELECTED_DISK..."
+gum style --border normal --margin "1" --padding "1" --border-foreground 212 \
+    "Target Disk: $DISK" \
+    "Boot Partition: $DEV_BOOT" \
+    "Root Partition: $DEV_ROOT" \
+    "Encryption: LUKS2" \
+    "Filesystem: Btrfs" \
+    "Image: $IMAGE"
 
-# Ensure the Dakota image is available
+gum confirm "⚠️  WIPE ALL DATA on $DISK?" || exit 1
+
+gum spin --spinner dot --title "Cleaning up..." -- bash -c "umount -R $MOUNT_POINT 2>/dev/null || true; cryptsetup close $MAPPER_NAME 2>/dev/null || true"
+
+echo "-> Partitioning..."
+wipefs -a "$DISK"
+sgdisk -o "$DISK"
+sgdisk -n 1:0:+"$BOOT_SIZE" -t 1:ef00 -c 1:"$BOOT_LABEL" "$DISK"
+sgdisk -n 2:0:0 -t 2:8300 -c 2:"$ROOT_LABEL" "$DISK"
+
+echo "-> Setting up LUKS..."
+cryptsetup luksFormat --type luks2 "$DEV_ROOT"
+cryptsetup open "$DEV_ROOT" "$MAPPER_NAME"
+
+echo "-> Creating filesystems..."
+mkfs.fat -F 32 -n "$BOOT_LABEL" "$DEV_BOOT"
+mkfs.btrfs -L "$ROOT_LABEL" -f "$MAPPER"
+
+echo "-> Mounting..."
+mkdir -p "$MOUNT_POINT"
+mount "$MAPPER" "$MOUNT_POINT"
+mkdir -p "$MOUNT_POINT/boot"
+mount "$DEV_BOOT" "$MOUNT_POINT/boot"
+
+BOOT_UUID=$(blkid -s UUID -o value "$DEV_BOOT")
+LUKS_UUID=$(blkid -s UUID -o value "$DEV_ROOT")
+
 echo "Checking for Dakota image..."
-if ! podman image exists ghcr.io/projectbluefin/dakota:latest; then
-    echo "Dakota image not found locally. Attempting to pull..."
-    podman pull ghcr.io/projectbluefin/dakota:latest || {
-        echo "Error: Failed to pull Dakota image and it is not available locally."
-        echo "If you are offline, ensure the image was pre-pulled during ISO build."
-        exit 1
-    }
-else
-    echo "Dakota image found locally. Proceeding..."
-    # Optional: try to pull if online, but don't fail if offline
-    podman pull ghcr.io/projectbluefin/dakota:latest || echo "Warning: Failed to check for latest Dakota image, using local version."
+if ! podman image exists "$IMAGE"; then
+    podman pull "$IMAGE" || exit 1
 fi
 
-# Use bootc install to-disk
-# partitioning is handled by bootc to-disk if specify --wipe
-# We use the arguments from the original script but adapted for to-disk
-echo "Running bootc install..."
+gum style --foreground 212 "Running bootc install..."
 podman run \
     --rm --privileged --pid=host \
     -v /etc/containers:/etc/containers:Z \
     -v /var/lib/containers:/var/lib/containers:Z \
     -v /dev:/dev \
     -e RUST_LOG=debug \
+    -v "$MOUNT_POINT:/mnt" \
     --security-opt label=type:unconfined_t \
-    "ghcr.io/projectbluefin/dakota:latest" \
-    bootc install to-disk \
-    --wipe \
+    "$IMAGE" bootc install to-filesystem /mnt \
+    --composefs-backend \
     --bootloader systemd \
     --karg splash \
     --karg quiet \
-    "/dev/$SELECTED_DISK"
+    --karg "rd.luks.name=${LUKS_UUID}=$MAPPER_NAME" \
+    --karg "root=$MAPPER" \
+    --karg rootflags=subvol=/ \
+    --karg rw || true
 
-echo "Installation complete! You can now reboot."
+echo "Configuring system..."
+mount -o remount,rw "$MOUNT_POINT"
+mount -o remount,rw "$MOUNT_POINT/boot"
+
+DEPLOY_DIR=$(find "$MOUNT_POINT/state/deploy" -maxdepth 1 -type d -name '*' | grep -v "$MOUNT_POINT/state/deploy$" | head -n 1)
+BOOT_ENTRY=$(find "$MOUNT_POINT/boot/loader/entries/" -name "*.conf" | head -n 1)
+COMPOSEFS_HASH=$(basename "$DEPLOY_DIR")
+
+if [ -n "$BOOT_ENTRY" ]; then
+    sed -i "s|^options.*|options rd.luks.name=${LUKS_UUID}=${MAPPER_NAME} rd.luks.uuid=luks-${LUKS_UUID} root=$MAPPER rootflags=subvol=/ rw boot=UUID=${BOOT_UUID} composefs=${COMPOSEFS_HASH} splash quiet|" "$BOOT_ENTRY"
+fi
+
+mkdir -p "${DEPLOY_DIR}/etc"
+cat << EOF > "${DEPLOY_DIR}/etc/crypttab"
+${MAPPER_NAME} UUID=${LUKS_UUID} none luks
+EOF
+
+cat << EOF > "${DEPLOY_DIR}/etc/fstab"
+$MAPPER  /      btrfs  defaults  0 0
+UUID=${BOOT_UUID}      /boot  vfat   defaults  0 2
+EOF
+
+sync
+umount -R "$MOUNT_POINT"
+cryptsetup close "$MAPPER_NAME"
+gum style --foreground 212 --bold "Installation Complete!"
