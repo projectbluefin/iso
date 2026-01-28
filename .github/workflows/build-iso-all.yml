@@ -1,11 +1,9 @@
 ---
 name: Build All ISOs
-# Orchestrator workflow that calls ALL individual ISO build workflows
-# Each individual workflow builds ONLY its own specific ISOs:
-#   - build-iso-lts      → 4 LTS ISOs only
-#   - build-iso-lts-hwe  → 2 LTS-HWE ISOs only
-#   - build-iso-stable   → 2 Stable ISOs only
-# Total: 8 ISOs across all variants
+# Orchestrator workflow that builds Stable ISOs only
+# Builds: 2 Stable ISOs
+#   - amd64 × main (bluefin:stable)
+#   - amd64 × nvidia-open (bluefin-nvidia-open:stable)
 on:
   workflow_dispatch:
     inputs:
@@ -13,9 +11,9 @@ on:
         description: 'Image tag to build from'
         type: choice
         options:
-          - lts
+          - stable
           - testing
-        default: lts
+        default: stable
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
         type: boolean
@@ -28,32 +26,12 @@ on:
     - cron: "0 3 * * TUE" # Push to testing bucket every week at 03:00 on Tuesdays - 2h after Bluefin publishes weekly builds.
 
 jobs:
-  build-iso-lts:
-    name: Build LTS ISOs
-    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
-    secrets: inherit
-    with:
-      image_version: lts  # Strictly LTS only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
-      upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
-
-  build-iso-lts-hwe:
-    name: Build LTS-HWE ISOs
-    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
-    secrets: inherit
-    with:
-      image_version: lts-hwe  # Strictly LTS-HWE only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
-      upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
-
   build-iso-stable:
     name: Build Stable ISOs
     uses: ./.github/workflows/reusable-build-iso-anaconda.yml
     secrets: inherit
     with:
       image_version: stable  # Strictly Stable only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
+      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'stable' }}
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
