@@ -32,6 +32,6 @@ jobs:
     secrets: inherit
     with:
       image_version: lts-hwe  # Strictly builds LTS-HWE ISOs only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
+      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts-hwe' }}
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}

@@ -1,21 +1,19 @@
 ---
 name: Build All ISOs
 # Orchestrator workflow that calls ALL individual ISO build workflows
-# Each individual workflow builds ONLY its own specific ISOs:
-#   - build-iso-lts      → 4 LTS ISOs only
-#   - build-iso-lts-hwe  → 2 LTS-HWE ISOs only
-#   - build-iso-stable   → 2 Stable ISOs only
-# Total: 8 ISOs across all variants
+# Builds ALL production ISOs with production tags only
+#
+# For testing tags (-testing), use individual variant workflows:
+#   - build-iso-lts.yml → select lts-testing
+#   - build-iso-lts-hwe.yml → select lts-hwe-testing
+#
+# Total: 8 production ISOs across all variants:
+#   - build-iso-stable   → 2 Stable ISOs (amd64 × main, amd64 × nvidia-open)
+#   - build-iso-lts      → 4 LTS ISOs (amd64/arm64 × main, amd64/arm64 × gdx)
+#   - build-iso-lts-hwe  → 2 LTS-HWE ISOs (amd64/arm64 × main)
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Image tag to build from'
-        type: choice
-        options:
-          - lts
-          - testing
-        default: lts
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
         type: boolean
@@ -44,7 +42,7 @@ jobs:
     secrets: inherit
     with:
       image_version: lts-hwe  # Strictly LTS-HWE only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
+      image_tag: lts-hwe
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
 
@@ -54,6 +52,6 @@ jobs:
     secrets: inherit
     with:
       image_version: stable  # Strictly Stable only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
+      image_tag: stable
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
