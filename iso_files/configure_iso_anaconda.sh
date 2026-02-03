@@ -49,7 +49,7 @@ systemctl disable brew-setup.service
 systemctl disable rpm-ostreed-automatic.timer
 systemctl disable uupd.timer
 systemctl disable ublue-system-setup.service
-systemctl disable ublue-guest-user.service
+systemctl disable ublue-guest-user.service || true
 systemctl disable check-sb-key.service
 systemctl disable flatpak-preinstall.service
 systemctl --global disable ublue-flatpak-manager.service
@@ -74,7 +74,7 @@ if [[ "$IMAGE_TAG" =~ lts ]]; then
 elif [[ "$(rpm -E %fedora)" -ge 42 ]]; then
     SPECS+=("anaconda-webui")
 fi
-dnf install -y "${SPECS[@]}"
+dnf install -y --allowerasing "${SPECS[@]}"
 
 dnf config-manager --set-disabled centos-hyperscale &>/dev/null || true
 
