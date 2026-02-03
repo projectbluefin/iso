@@ -49,12 +49,15 @@ systemctl disable brew-setup.service
 systemctl disable rpm-ostreed-automatic.timer
 systemctl disable uupd.timer
 systemctl disable ublue-system-setup.service
-systemctl disable ublue-guest-user.service || true
-systemctl disable check-sb-key.service
 systemctl disable flatpak-preinstall.service
 systemctl --global disable ublue-flatpak-manager.service
 systemctl --global disable podman-auto-update.timer
 systemctl --global disable ublue-user-setup.service
+
+# HACK for https://bugzilla.redhat.com/show_bug.cgi?id=2433186
+rpm --erase --nodeps --justdb generic-logos
+dnf download fedora-logos
+rpm -i --justdb fedora-logos*.rpm
 
 # Configure Anaconda
 
@@ -66,17 +69,10 @@ SPECS=(
     "anaconda-live"
     "firefox"
 )
-if [[ "$IMAGE_TAG" =~ lts ]]; then
-    dnf config-manager --set-enabled centos-release-kmods-kernel
-    dnf copr enable -y jreilly/anaconda-webui
 
-    SPECS+=("anaconda-webui")
-elif [[ "$(rpm -E %fedora)" -ge 42 ]]; then
-    SPECS+=("anaconda-webui")
-fi
-dnf install -y --allowerasing "${SPECS[@]}"
+dnf install -y "${SPECS[@]}"
 
-dnf config-manager --set-disabled centos-hyperscale &>/dev/null || true
+rpm --erase --nodeps --justdb fedora-logos
 
 # Anaconda Profile Detection
 
