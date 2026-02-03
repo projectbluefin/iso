@@ -70,10 +70,6 @@ SPECS=(
     "firefox"
 )
 
-    SPECS+=("anaconda-webui")
-elif [[ "$(rpm -E %fedora)" -ge 42 ]]; then
-    SPECS+=("anaconda-webui")
-fi
 dnf install -y "${SPECS[@]}"
 
 rpm --erase --nodeps --justdb fedora-logos
