@@ -47,6 +47,11 @@ systemctl disable ublue-system-setup.service
 systemctl --global disable podman-auto-update.timer
 systemctl --global disable ublue-user-setup.service
 
+# HACK for https://bugzilla.redhat.com/show_bug.cgi?id=2433186
+rpm --erase --nodeps --justdb generic-logos
+dnf download centos-logos
+rpm -i --justdb centos-logos*.rpm
+
 # Configure Anaconda
 
 # remove anaconda-liveinst to be replaced with anaconda-live
@@ -68,6 +73,8 @@ SPECS=(
 dnf copr enable -y jreilly1821/anaconda-webui
 
 dnf install -y --nobest --allowerasing "${SPECS[@]}"
+
+rpm --erase --nodeps --justdb centos-logos
 
 # Fix the wrong dir for webui
 sed -i 's|/usr/libexec/webui-desktop|/usr/libexec/anaconda/webui-desktop|g' /bin/liveinst
