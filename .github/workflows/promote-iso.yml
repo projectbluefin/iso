@@ -36,10 +36,10 @@ jobs:
       # Production Bucket Config (Destination) - using dedicated production credentials
       RCLONE_CONFIG_R2_PROD_TYPE: s3
       RCLONE_CONFIG_R2_PROD_PROVIDER: Cloudflare
-      RCLONE_CONFIG_R2_PROD_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID_PRODTEST }}
-      RCLONE_CONFIG_R2_PROD_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY_PRODTEST }}
+      RCLONE_CONFIG_R2_PROD_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_PRODUCTION }}
+      RCLONE_CONFIG_R2_PROD_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_PRODUCTION }}
       RCLONE_CONFIG_R2_PROD_REGION: auto
-      RCLONE_CONFIG_R2_PROD_ENDPOINT: ${{ secrets.R2_ENDPOINT_PRODTEST }}
+      RCLONE_CONFIG_R2_PROD_ENDPOINT: ${{ secrets.R2_ENDPOINT_PRODUCTION }}
 
     steps:
       - name: Set up Homebrew
