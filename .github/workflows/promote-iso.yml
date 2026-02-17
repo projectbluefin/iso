@@ -72,7 +72,7 @@ jobs:
         if: inputs.dry_run == true
         run: |
           echo "Running in DRY RUN mode - no files will be copied"
-          rclone sync R2_TEST:testing R2_PROD:prodtest \
+          rclone sync R2_TEST:testing R2_PROD:bluefin \
             ${{ steps.filter.outputs.filter }} \
             --dry-run \
             --verbose
@@ -81,7 +81,7 @@ jobs:
         if: inputs.dry_run == false
         run: |
           echo "Promoting ISOs from Test to Production"
-          rclone sync R2_TEST:testing R2_PROD:prodtest \
+          rclone sync R2_TEST:testing R2_PROD:bluefin \
             ${{ steps.filter.outputs.filter }} \
             --verbose \
             --progress
@@ -90,4 +90,4 @@ jobs:
         if: inputs.dry_run == false
         run: |
           echo "Files in Production bucket after promotion:"
-          rclone ls R2_PROD:prodtest ${{ steps.filter.outputs.filter }}
+          rclone ls R2_PROD:bluefin ${{ steps.filter.outputs.filter }}
