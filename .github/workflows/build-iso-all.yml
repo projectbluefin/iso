@@ -23,7 +23,7 @@ on:
         type: boolean
         default: true
   schedule:
-    - cron: "0 3 * * TUE" # Push to testing bucket every week at 03:00 on Tuesdays - 2h after Bluefin publishes weekly builds.
+    - cron: "0 3 1 1" # Push to testing bucket on the first of the month at 03:00 on Tuesdays - 2h after Bluefin publishes weekly builds.
 
 jobs:
   build-iso-lts:
