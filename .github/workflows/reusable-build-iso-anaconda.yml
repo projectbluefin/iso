@@ -189,6 +189,41 @@ jobs:
           (cd "${OUTPUT_DIRECTORY}" && sha256sum "${OUTPUT_NAME}.iso" | tee "${OUTPUT_NAME}.iso-CHECKSUM")
           echo "output_directory=$OUTPUT_DIRECTORY" >> "${GITHUB_OUTPUT}"
 
+      - name: Generate Torrent File
+        env:
+          OUTPUT_DIRECTORY: ${{ steps.rename.outputs.output_directory }}
+          OUTPUT_NAME: ${{ steps.image_ref.outputs.artifact_format }}
+          IMAGE_VERSION: ${{ matrix.image_version }}
+          FLAVOR: ${{ matrix.flavor }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -eoux pipefail
+
+          sudo apt-get install -y mktorrent
+
+          BUILD_DATE=$(date -u +%Y-%m-%d)
+
+          cd "${OUTPUT_DIRECTORY}"
+          mktorrent \
+            -a udp://tracker.opentrackr.org:1337/announce \
+            -a udp://open.tracker.cl:1337/announce \
+            -a udp://open.demonii.com:1337/announce \
+            -a udp://tracker.openbittorrent.com:6969/announce \
+            -a udp://exodus.desync.com:6969/announce \
+            -a udp://tracker.torrent.eu.org:451/announce \
+            -a udp://tracker.moeking.me:6969/announce \
+            -a https://tracker.gbitt.info:443/announce \
+            -a https://tracker.tamersunion.org:443/announce \
+            -a wss://tracker.btorrent.xyz \
+            -a wss://tracker.openwebtorrent.com \
+            -w "https://projectbluefin.dev/${OUTPUT_NAME}.iso" \
+            -w "https://download.projectbluefin.io/${OUTPUT_NAME}.iso" \
+            -c "Bluefin ${IMAGE_VERSION} ${FLAVOR} (${PLATFORM}) - ${BUILD_DATE}" \
+            -o "${OUTPUT_NAME}.iso.torrent" \
+            "${OUTPUT_NAME}.iso"
+
+          sha256sum "${OUTPUT_NAME}.iso.torrent" | tee "${OUTPUT_NAME}.iso.torrent-CHECKSUM"
+
       - name: Upload to Job Artifacts
         if: inputs.upload_artifacts
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
