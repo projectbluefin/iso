@@ -345,11 +345,11 @@ jobs:
 
           1. Download a `.torrent` file below
           2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)
-          3. Torrents include web seeds for immediate downloads
+          3. Torrents include web seeds -- downloads work immediately
 
           ### Direct Downloads
 
-          ISOs are also available at https://download.projectbluefin.io/ (testing bucket)
+          ISOs are also available at https://docs.projectbluefin.io/downloads
 
           ### Verify
 

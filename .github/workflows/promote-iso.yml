@@ -142,28 +142,21 @@ jobs:
 
           # Update release notes
           gh release edit "${TAG}" --notes "$(cat <<'EOF'
-          ## ✅ Production Release
-
-          These ISOs have been validated and promoted to production.
-
-          **Status**: Production-ready
-          **Available at**: https://download.projectbluefin.io/
+          ## Bluefin ISO Torrents
 
           ### How to Download
 
           1. Download a `.torrent` file below
           2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)
-          3. Torrents include web seeds from production CDN
+          3. Torrents include web seeds -- downloads work immediately
 
           ### Direct Downloads
 
-          ISOs are available at https://download.projectbluefin.io/
+          ISOs are also available at https://docs.projectbluefin.io/downloads
 
           ### Verify
 
-          ```bash
           sha256sum -c <filename>.torrent-CHECKSUM
-          ```
           EOF
           )"
 
