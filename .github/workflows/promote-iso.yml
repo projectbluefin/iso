@@ -12,6 +12,10 @@ on:
           - stable
           - lts
           - all
+      release_tag:
+        description: 'GitHub release tag to promote (e.g., 26.02.1). Leave empty to auto-detect latest prerelease.'
+        type: string
+        required: false
       dry_run:
         description: 'Run in dry-run mode (preview changes without copying)'
         required: false
@@ -91,3 +95,69 @@ jobs:
         run: |
           echo "Files in Production bucket after promotion:"
           rclone ls R2_PROD:bluefin ${{ steps.filter.outputs.filter }}
+
+  promote-release:
+    name: Promote GitHub Release
+    needs: promote
+    if: inputs.dry_run == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Determine release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eoux pipefail
+          if [ -n "${{ inputs.release_tag }}" ]; then
+            TAG="${{ inputs.release_tag }}"
+          else
+            # Auto-detect latest prerelease
+            TAG=$(gh release list --limit 20 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease == true) | .tagName' | head -n1)
+            if [ -z "$TAG" ]; then
+              echo "No prerelease found to promote"
+              exit 1
+            fi
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Promoting release: ${TAG}"
+
+      - name: Update release to full release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -eoux pipefail
+
+          # Edit release to remove prerelease flag and mark as latest
+          gh release edit "${TAG}" \
+            --prerelease=false \
+            --latest \
+            --title "Bluefin ISOs ${TAG}"
+
+          # Update release notes
+          gh release edit "${TAG}" --notes "$(cat <<'EOF'
+          ## Bluefin ISO Torrents
+
+          ### How to Download
+
+          1. Download a `.torrent` file below
+          2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)
+          3. Torrents include web seeds -- downloads work immediately
+
+          ### Direct Downloads
+
+          ISOs are also available at https://docs.projectbluefin.io/downloads
+
+          ### Verify
+
+          sha256sum -c <filename>.torrent-CHECKSUM
+          EOF
+          )"
+
+          echo "Successfully promoted release ${TAG} to production"
