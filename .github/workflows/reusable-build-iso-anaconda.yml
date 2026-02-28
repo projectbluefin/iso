@@ -253,3 +253,109 @@ jobs:
           SOURCE_DIR: ${{ steps.rename.outputs.output_directory }}
         run: |
           rclone copy --log-level INFO --checksum "${SOURCE_DIR}" R2:testing
+
+  create-prerelease:
+    name: Create GitHub Prerelease
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID_2025 }}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY_2025 }}
+      RCLONE_CONFIG_R2_REGION: auto
+      RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_2025 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install rclone
+        run: brew install rclone
+
+      - name: Download Torrent Files from R2
+        run: |
+          set -eoux pipefail
+          mkdir -p torrents
+          rclone copy R2:testing torrents \
+            --include "*.iso.torrent" \
+            --include "*.iso.torrent-CHECKSUM" \
+            --log-level INFO
+
+          echo "Downloaded torrent files:"
+          ls -lh torrents/
+
+          if [ -z "$(ls torrents/*.torrent 2>/dev/null)" ]; then
+            echo "No torrent files found in R2 testing bucket"
+            exit 1
+          fi
+
+      - name: Determine Release Version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eoux pipefail
+          YEAR_MONTH=$(date -u +%y.%m)
+
+          if gh release view "${YEAR_MONTH}" >/dev/null 2>&1; then
+            PATCH=1
+            while gh release view "${YEAR_MONTH}.${PATCH}" >/dev/null 2>&1; do
+              PATCH=$((PATCH + 1))
+            done
+            VERSION="${YEAR_MONTH}.${PATCH}"
+          else
+            VERSION="${YEAR_MONTH}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eoux pipefail
+
+          TORRENT_LIST=""
+          for f in torrents/*.torrent torrents/*.torrent-CHECKSUM; do
+            [ -f "$f" ] && TORRENT_LIST="${TORRENT_LIST} ${f}"
+          done
+
+          gh release create "${VERSION}" \
+            --prerelease \
+            --title "Bluefin ISOs ${VERSION} (Prerelease)" \
+            --notes "$(cat <<'EOF'
+          ## ⚠️ Prerelease - Testing Builds
+
+          These ISOs are automatically generated from successful builds and uploaded to the **testing** bucket.
+
+          **Status**: Not yet promoted to production
+          **For**: Testing and validation only
+
+          Once validated, these builds can be promoted to production using the promotion workflow.
+
+          ### How to Download
+
+          1. Download a `.torrent` file below
+          2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)
+          3. Torrents include web seeds for immediate downloads
+
+          ### Direct Downloads
+
+          ISOs are also available at https://download.projectbluefin.io/ (testing bucket)
+
+          ### Verify
+
+          ```bash
+          sha256sum -c <filename>.torrent-CHECKSUM
+          ```
+          EOF
+          )" \
+            ${TORRENT_LIST}
