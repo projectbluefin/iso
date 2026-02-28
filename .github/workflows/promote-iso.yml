@@ -59,7 +59,7 @@ jobs:
               echo "filter=--include *-lts-*.iso* --include *-lts-hwe-*.iso* --include *-dx-lts-*.iso*" >> $GITHUB_OUTPUT
               ;;
             all)
-              echo "filter=--include *.iso --include *.iso-CHECKSUM" >> $GITHUB_OUTPUT
+              echo "filter=--include *.iso --include *.iso-CHECKSUM --include *.iso.torrent --include *.iso.torrent-CHECKSUM" >> $GITHUB_OUTPUT
               ;;
           esac
 
