@@ -1,3 +1,6 @@
+# OpenCode
+.opencode/
+
 # Build artifacts
 *_build*/
 *.iso

@@ -13,89 +13,67 @@ Workflows and configuration files needed to build bootable Bluefin ISOs for inst
 
 ![ISO go nomnom](https://github.com/user-attachments/assets/2feeb772-713f-40b3-81e8-3f93b157fa13)
 
+## ⚠️ LTS ISO Status: DISABLED
+
+**LTS (non-HWE) ISOs are currently broken.** Anaconda does not work correctly on
+the LTS base image. The `build-iso-lts.yml` workflow has no schedule and will not
+fire automatically. Working LTS ISOs remain in the production bucket from before
+this breakage and must not be overwritten.
+
+**Do not** run `promote-iso.yml` with `variant: lts` or `variant: all` — both
+patterns match `*-lts-*.iso*` filenames and would overwrite production ISOs.
+
+Only `variant: stable` promotion is safe until LTS is fixed.
+
 ## Workflow Structure
 
-The ISO build system consists of independent, focused workflows that can be triggered individually or as a group:
+The ISO build system consists of independent, focused workflows:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                     Individual Workflows                      │
-│                 (Can be triggered separately)                 │
-└──────────────────────────────────────────────────────────────┘
-
-┌─────────────────────┐  ┌─────────────────────┐
-│  build-iso-lts      │  │  build-iso-lts-hwe  │
-│                     │  │                     │
-│ ✓ workflow_dispatch │  │ ✓ workflow_dispatch │
-│ ✓ schedule (cron)   │  │ ✓ schedule (cron)   │
-│ ✓ upload options    │  │ ✓ upload options    │
-│                     │  │                     │
-│ Builds: LTS ISOs    │  │ Builds: LTS-HWE ISOs│
-│ - amd64 × main      │  │ - amd64 × main      │
-│ - amd64 × gdx       │  │ - arm64 × main      │
-│ - arm64 × main      │  │                     │
-│ - arm64 × gdx       │  │                     │
-└─────────┬───────────┘  └─────────┬───────────┘
-          │                        │
-          └────────┬───────────────┘
-                   │
-          ┌────────▼────────┐
-          │  calls reusable │
-          │    workflow     │
-          └────────┬────────┘
-                   │
-┌─────────────────────┐  ┌─────────────────────┐
-│  build-iso-lts-hwe  │  │  build-iso-stable   │
-│                     │  │                     │
-│ ✓ workflow_dispatch │  │ ✓ workflow_dispatch │
-│ ✓ schedule (cron)   │  │ ✓ schedule (cron)   │
-│ ✓ upload options    │  │ ✓ upload options    │
-│                     │  │                     │
-│ Builds: LTS-HWE ISOs│  │ Builds: Stable ISOs │
-│ - amd64 × main      │  │ - amd64 × main      │
-│ - arm64 × main      │  │ - amd64 × nvidia-open│
-└─────────┬───────────┘  └─────────┬───────────┘
-          │                        │
-          └────────┬───────────────┘
-                   │
-          ┌────────▼────────┐
-          │  calls reusable │
-          │    workflow     │
-          └─────────────────┘
+┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
+│  build-iso-lts      │  │  build-iso-lts-hwe  │  │  build-iso-stable   │
+│  (DISABLED)         │  │                     │  │                     │
+│ ✓ workflow_dispatch │  │ ✓ workflow_dispatch │  │ ✓ workflow_dispatch │
+│ ✗ no schedule       │  │ ✓ schedule (cron)   │  │ ✓ schedule (cron)   │
+│                     │  │                     │  │                     │
+│ Builds: LTS ISOs    │  │ Builds: LTS-HWE ISOs│  │ Builds: Stable ISOs │
+│ - amd64 × main      │  │ - amd64 × main      │  │ - amd64 × main      │
+│ - amd64 × gdx       │  │ - arm64 × main      │  │ - amd64 × nvidia-open│
+│ - arm64 × main      │  │                     │  │                     │
+│ - arm64 × gdx       │  │                     │  │                     │
+└─────────┬───────────┘  └─────────┬───────────┘  └─────────┬───────────┘
+          │                        │                        │
+          └────────────────────────┼────────────────────────┘
+                                   │
+                          ┌────────▼────────┐
+                          │  calls reusable │
+                          │    workflow     │
+                          └─────────────────┘
 
 ═══════════════════════════════════════════════════════════════
-
-┌──────────────────────────────────────────────────────────────┐
-│                   Orchestration Workflow                      │
-│              (Calls all individual workflows)                 │
-└──────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
 │                    build-iso-all                             │
 │                   "Build All ISOs"                           │
 │                                                              │
-│ ✓ workflow_dispatch                                         │
-│ ✓ schedule (cron)                                           │
-│ ✓ upload options                                            │
+│ ✓ workflow_dispatch only (broken cron — see AGENTS.md)      │
 │                                                              │
-│ Orchestrates all 3 workflows in parallel:                   │
-│ ├─► build-iso-lts                                           │
-│ ├─► build-iso-lts-hwe                                       │
-│ └─► build-iso-stable                                        │
+│ Calls reusable workflow directly for each variant:          │
+│ ├─► stable  (image_tag: stable)                             │
+│ ├─► lts     (image_tag: lts)                                │
+│ └─► lts-hwe (image_tag: lts-hwe)                           │
 └─────────────────────────────────────────────────────────────┘
-
-Schedule: All workflows run at 2am UTC on the 1st of each month
 ```
 
 ### Key Features
-- **Strict ISO Scoping:** Each workflow builds ONLY its designated ISOs - no cross-contamination
-  - `build-iso-lts.yml` → **LTS ISOs only** (never builds Stable or LTS-HWE) - currently OFF since Anaconda is not working on LTS versions so we are keeping older working ISOs in the bucket
-  - `build-iso-lts-hwe.yml` → **LTS-HWE ISOs only** (never builds Stable or LTS)
-  - `build-iso-stable.yml` → **Stable ISOs only** (never builds LTS or LTS-HWE)
-- **Independent Execution:** Each workflow can run independently without affecting others
-- **Orchestration:** The "Build All ISOs" workflow calls all others in parallel
+- **Strict ISO Scoping:** Each workflow builds ONLY its designated ISOs — no cross-contamination
+  - `build-iso-lts.yml` → **LTS ISOs only** — currently DISABLED (Anaconda broken on LTS)
+  - `build-iso-lts-hwe.yml` → **LTS-HWE ISOs only**
+  - `build-iso-stable.yml` → **Stable ISOs only**
+- **Independent Execution:** Each workflow can run independently
 - **Flexible Upload:** Control artifact and R2 uploads per execution
-- **Consistent Scheduling:** All workflows on same monthly schedule (cron: `0 2 1 * *`)
+- **Testing tags:** LTS and LTS-HWE callers accept `image_tag` input to select `-testing` variants
+- **Monthly schedule:** Stable and LTS-HWE run at 2am UTC on the 1st of every month
 
 ## ISO Variants
 
@@ -123,10 +101,10 @@ Each workflow is **strictly scoped** to build only its designated ISO variant:
 
 | Workflow File | Builds | Does NOT Build |
 |---------------|--------|----------------|
-| `build-iso-lts.yml` | **4 LTS ISOs only**<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ Stable<br/>❌ LTS-HWE |
+| `build-iso-lts.yml` | **4 LTS ISOs only** (DISABLED — no schedule)<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ Stable<br/>❌ LTS-HWE |
 | `build-iso-lts-hwe.yml` | **2 LTS-HWE ISOs only**<br/>- amd64 × main<br/>- arm64 × main | ❌ Stable<br/>❌ LTS |
 | `build-iso-stable.yml` | **2 Stable ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE |
-| `build-iso-all.yml` | All 8 ISOs (calls all 3 workflows above) | N/A - orchestrator |
+| `build-iso-all.yml` | All 8 ISOs (calls reusable workflow directly) | N/A - orchestrator |
 
 This strict separation ensures:
 - ✅ Predictable builds: You know exactly which ISOs each workflow produces
@@ -149,48 +127,48 @@ Trigger individual workflow dispatches for specific variants:
 
 ### Automatic Build
 ISOs are built automatically:
-- **Monthly schedule:** All workflows run at 2am UTC on the 1st of every month
+- **Monthly schedule:** Stable and LTS-HWE run at 2am UTC on the 1st of every month
+- **LTS:** No automatic schedule — see LTS disabled warning above
 - **On changes:** When ISO configuration files are modified (via pull requests)
 
 ## Repository Structure
 
 ```
 .
-├── .github/workflows/       # GitHub Actions workflows
-│   ├── build-iso-lts.yml   # LTS ISO build workflow
-│   ├── build-iso-lts-hwe.yml  # LTS-HWE ISO build workflow
-│   ├── build-iso-stable.yml  # Stable ISO build workflow
-│   ├── build-iso-all.yml   # Orchestrates all ISO builds
-│   ├── reusable-build-iso-anaconda.yml  # Core reusable ISO build workflow
-│   ├── validate-flatpaks.yml   # Validate Flatpak lists
-│   └── validate-renovate.yml   # Validate Renovate config
-├── iso_files/               # ISO configuration files
-│   ├── configure_iso_anaconda.sh  # Standard ISO configuration
-│   ├── configure_lts_iso_anaconda.sh  # LTS ISO configuration
-│   └── bluefin.repo         # Generated COPR repository file
-├── flatpaks/                # Flatpak application lists
-│   ├── system-flatpaks.list  # Base system flatpaks
-│   ├── system-flatpaks-dx.list  # Developer flatpaks
-│   └── system-flatpaks-extra.list  # Extra flatpaks
-├── just/                    # Just recipes for system management
-│   ├── bluefin-apps.just   # Application management
-│   └── bluefin-system.just # System management
-├── Justfile                 # Main build recipes
-└── AGENTS.md               # Copilot agent instructions
-
+├── .github/workflows/
+│   ├── build-iso-stable.yml             # Caller: Stable ISOs
+│   ├── build-iso-lts.yml                # Caller: LTS ISOs (DISABLED)
+│   ├── build-iso-lts-hwe.yml            # Caller: LTS-HWE ISOs
+│   ├── build-iso-all.yml                # Orchestrator (workflow_dispatch only)
+│   ├── reusable-build-iso-anaconda.yml  # Core build logic
+│   ├── promote-iso.yml                  # Promote testing → production
+│   ├── pull-request.yml                 # PR check builds (no upload)
+│   └── validate-renovate.yml            # Validate Renovate config
+├── iso_files/
+│   ├── configure_iso_anaconda.sh        # Hook script for Stable ISOs
+│   └── configure_lts_iso_anaconda.sh    # Hook script for LTS/LTS-HWE ISOs
+├── hack/
+│   └── local-iso-build.sh               # Local development build script
+├── just/
+│   ├── bluefin-apps.just                # Application management recipes
+│   └── bluefin-system.just              # System management recipes
+├── Justfile                             # Build automation
+└── AGENTS.md                            # Agent instructions
 ```
 
 ## Configuration Files
 
 ### ISO Configuration Scripts
-- `iso_files/configure_iso_anaconda.sh` - Configures the live environment and Anaconda installer for standard releases
-- `iso_files/configure_lts_iso_anaconda.sh` - Configures the live environment and Anaconda installer for LTS releases
+- `iso_files/configure_iso_anaconda.sh` - Configures the live environment and Anaconda installer for Stable releases
+- `iso_files/configure_lts_iso_anaconda.sh` - Configures the live environment and Anaconda installer for LTS/LTS-HWE releases
 
 ### Flatpak Lists
-Flatpaks to be pre-installed on the ISO:
-- `flatpaks/system-flatpaks.list` - Core applications
-- `flatpaks/system-flatpaks-dx.list` - Additional developer tools
-- `flatpaks/system-flatpaks-extra.list` - Optional extra applications
+Flatpaks are **not stored in this repo**. The build workflow clones
+[projectbluefin/common](https://github.com/projectbluefin/common) at build time
+and parses all `*system-flatpaks.Brewfile` files to generate the installer list.
+
+For downstream forks, update the git clone URL in the "Generate titanoboa-compatible
+file list" step of `reusable-build-iso-anaconda.yml`.
 
 ## Development
 
@@ -224,7 +202,9 @@ just build-iso-ghcr bluefin stable main
 
 Built ISOs are uploaded to:
 - CloudFlare R2 `testing` bucket (for automatic builds)
-- GitHub Actions artifacts (for pull request builds)
+- GitHub Actions artifacts (when `upload_artifacts: true`)
+- GitHub prereleases — torrent files are generated for each ISO and attached
+  to a prerelease (`YY.MM[.N]`) automatically after every successful build
 
 ISO naming format: `{image-name}-{version}-{arch}.iso`
 
@@ -256,11 +236,11 @@ The repository uses a two-stage release pipeline with testing and production buc
                 └───────────┬───────────┘
                             │
                             ▼
-                    ┌───────────────┐
-                    │  Production   │
-                    │    Bucket     │  ← Controlled release
-                    │  (prodtest)   │
-                    └───────────────┘
+                     ┌───────────────┐
+                     │  Production   │
+                     │    Bucket     │  ← Controlled release
+                     │   (bluefin)   │
+                     └───────────────┘
 ```
 
 ### Promoting ISOs to Production
@@ -300,6 +280,10 @@ The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing 
 6. Verify the promotion in the workflow output
 
 #### Variant Selection Details
+
+> ⚠️ **LTS is currently broken.** Do NOT promote with `variant: lts` or `variant: all`
+> — both patterns match `*-lts-*.iso*` files and will overwrite working production
+> LTS ISOs with broken builds. Only `variant: stable` is safe.
 
 | Variant | ISOs Promoted | Use Case |
 |---------|--------------|----------|
