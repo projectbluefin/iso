@@ -128,7 +128,7 @@ jobs:
             podman
 
       - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: recursive
 
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload to Job Artifacts
         if: inputs.upload_artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: ${{ steps.image_ref.outputs.artifact_format }}
           if-no-files-found: error
@@ -271,7 +271,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@8f52032f943acddc1c5670f437b94e031e78afc0 # master
