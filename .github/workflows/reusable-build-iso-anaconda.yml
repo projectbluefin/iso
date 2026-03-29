@@ -234,7 +234,7 @@ jobs:
 
       - name: Set up Homebrew
         if: inputs.upload_r2 && github.event_name != 'pull_request'
-        uses: Homebrew/actions/setup-homebrew@master
+        uses: Homebrew/actions/setup-homebrew@8f52032f943acddc1c5670f437b94e031e78afc0 # master
 
       - name: Install rclone
         if: inputs.upload_r2 && github.event_name != 'pull_request'
@@ -274,7 +274,7 @@ jobs:
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+        uses: Homebrew/actions/setup-homebrew@8f52032f943acddc1c5670f437b94e031e78afc0 # master
 
       - name: Install rclone
         run: brew install rclone
