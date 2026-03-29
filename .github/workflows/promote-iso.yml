@@ -11,11 +11,16 @@ on:
         options:
           - stable
           - lts
-          - all
+          - lts-hwe
       release_tag:
         description: 'GitHub release tag to promote (e.g., 26.02.1). Leave empty to auto-detect latest prerelease.'
         type: string
         required: false
+      allow_unsafe_lts:
+        description: 'UNSAFE: allow promoting LTS (non-HWE) ISOs. Requires explicit acknowledgment.'
+        required: false
+        type: boolean
+        default: false
       dry_run:
         description: 'Run in dry-run mode (preview changes without copying)'
         required: false
@@ -26,6 +31,11 @@ jobs:
   promote:
     name: Promote ${{ inputs.variant }} ISOs to Production
     runs-on: ubuntu-latest
+    outputs:
+      source_tag: ${{ steps.preflight.outputs.source_tag }}
+      source_release_id: ${{ steps.preflight.outputs.source_release_id }}
+      candidate_count: ${{ steps.preflight.outputs.candidate_count }}
+      filter_file: ${{ steps.preflight.outputs.filter_file }}
     permissions:
       contents: read
     env:
@@ -52,54 +62,165 @@ jobs:
       - name: Install rclone
         run: brew install rclone
 
-      - name: Determine filter pattern
-        id: filter
+      - name: Preflight checks
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
+          if [ "${{ inputs.variant }}" = "lts" ] && [ "${{ inputs.allow_unsafe_lts }}" != "true" ]; then
+            echo "Refusing to promote variant 'lts' without inputs.allow_unsafe_lts=true"
+            exit 1
+          fi
+
+          if [ -n "${{ inputs.release_tag }}" ]; then
+            SOURCE_TAG="${{ inputs.release_tag }}"
+          else
+            SOURCE_TAG=$(gh release list --limit 50 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease == true) | .tagName' | sed -n '1p')
+            if [ -z "${SOURCE_TAG}" ]; then
+              echo "No prerelease found to promote"
+              exit 1
+            fi
+          fi
+
+          RELEASE_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${SOURCE_TAG}" 2>/dev/null || true)
+          if [ -z "${RELEASE_JSON}" ]; then
+            echo "Source release tag '${SOURCE_TAG}' not found"
+            exit 1
+          fi
+
+          IS_PRERELEASE=$(printf '%s' "${RELEASE_JSON}" | jq -r '.prerelease')
+          RELEASE_ID=$(printf '%s' "${RELEASE_JSON}" | jq -r '.id')
+
+          if [ "${IS_PRERELEASE}" != "true" ]; then
+            echo "Source release '${SOURCE_TAG}' exists but is not a prerelease"
+            exit 1
+          fi
+
+          RELEASE_ASSET_LIST="${RUNNER_TEMP}/source-release-assets-${SOURCE_TAG}.txt"
+          printf '%s\n' "${RELEASE_JSON}" | jq -r '.assets[]?.name' > "${RELEASE_ASSET_LIST}"
+
+          RELEASE_ASSET_COUNT=$(wc -l < "${RELEASE_ASSET_LIST}" | tr -d '[:space:]')
+          if [ "${RELEASE_ASSET_COUNT}" -eq 0 ]; then
+            echo "Source prerelease '${SOURCE_TAG}' has no assets"
+            exit 1
+          fi
+
+          FILTER_FILE="${RUNNER_TEMP}/rclone-filter-${{ inputs.variant }}.txt"
           case "${{ inputs.variant }}" in
             stable)
-              echo "filter=--include *-stable-*.iso*" >> $GITHUB_OUTPUT
+              printf '%s\n' \
+                '+ *-stable-*.iso*' \
+                '- *' > "${FILTER_FILE}"
               ;;
             lts)
-              echo "filter=--include *-lts-*.iso* --include *-lts-hwe-*.iso* --include *-dx-lts-*.iso*" >> $GITHUB_OUTPUT
+              printf '%s\n' \
+                '- *-lts-hwe-*.iso*' \
+                '+ *-dx-lts-*.iso*' \
+                '+ *-lts-*.iso*' \
+                '- *' > "${FILTER_FILE}"
               ;;
-            all)
-              echo "filter=--include *.iso --include *.iso-CHECKSUM --include *.iso.torrent --include *.iso.torrent-CHECKSUM" >> $GITHUB_OUTPUT
+            lts-hwe)
+              printf '%s\n' \
+                '+ *-lts-hwe-*.iso*' \
+                '- *' > "${FILTER_FILE}"
+              ;;
+            *)
+              echo "Unsupported variant '${{ inputs.variant }}'"
+              exit 1
               ;;
           esac
 
+          CANDIDATE_LIST="${RUNNER_TEMP}/candidate-files-${{ inputs.variant }}.txt"
+          rclone lsf R2_TEST:testing --filter-from "${FILTER_FILE}" > "${CANDIDATE_LIST}"
+          CANDIDATE_COUNT=$(wc -l < "${CANDIDATE_LIST}" | tr -d '[:space:]')
+
+          SOURCE_VARIANT_ASSET_COUNT=0
+          while IFS= read -r asset_name; do
+            case "${{ inputs.variant }}" in
+              stable)
+                case "${asset_name}" in
+                  *-stable-*.iso.torrent|*-stable-*.iso.torrent-CHECKSUM)
+                    SOURCE_VARIANT_ASSET_COUNT=$((SOURCE_VARIANT_ASSET_COUNT + 1))
+                    ;;
+                esac
+                ;;
+              lts)
+                case "${asset_name}" in
+                  *-lts-hwe-*.iso.torrent|*-lts-hwe-*.iso.torrent-CHECKSUM)
+                    ;;
+                  *-dx-lts-*.iso.torrent|*-dx-lts-*.iso.torrent-CHECKSUM|*-lts-*.iso.torrent|*-lts-*.iso.torrent-CHECKSUM)
+                    SOURCE_VARIANT_ASSET_COUNT=$((SOURCE_VARIANT_ASSET_COUNT + 1))
+                    ;;
+                esac
+                ;;
+              lts-hwe)
+                case "${asset_name}" in
+                  *-lts-hwe-*.iso.torrent|*-lts-hwe-*.iso.torrent-CHECKSUM)
+                    SOURCE_VARIANT_ASSET_COUNT=$((SOURCE_VARIANT_ASSET_COUNT + 1))
+                    ;;
+                esac
+                ;;
+            esac
+          done < "${RELEASE_ASSET_LIST}"
+
+          echo "Source prerelease: ${SOURCE_TAG} (id=${RELEASE_ID})"
+          echo "Candidate files in testing bucket (${CANDIDATE_COUNT}):"
+          cat "${CANDIDATE_LIST}"
+
+          if [ "${CANDIDATE_COUNT}" -eq 0 ]; then
+            echo "No candidate files matched for variant '${{ inputs.variant }}' in R2_TEST:testing"
+            exit 1
+          fi
+
+          if [ "${SOURCE_VARIANT_ASSET_COUNT}" -eq 0 ]; then
+            echo "Source prerelease '${SOURCE_TAG}' has no assets for variant '${{ inputs.variant }}'"
+            exit 1
+          fi
+
+          echo "source_tag=${SOURCE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "source_release_id=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
+          echo "candidate_count=${CANDIDATE_COUNT}" >> "$GITHUB_OUTPUT"
+          echo "filter_file=${FILTER_FILE}" >> "$GITHUB_OUTPUT"
+
       - name: List files in Test bucket
         run: |
+          set -euo pipefail
           echo "Files in Test bucket matching variant '${{ inputs.variant }}':"
-          rclone ls R2_TEST:testing ${{ steps.filter.outputs.filter }}
+          rclone ls R2_TEST:testing --filter-from "${{ steps.preflight.outputs.filter_file }}"
 
       - name: Promote ISOs (Dry Run)
-        if: inputs.dry_run == true
+        if: ${{ inputs.dry_run == true }}
         run: |
+          set -euo pipefail
           echo "Running in DRY RUN mode - no files will be copied"
-          rclone sync R2_TEST:testing R2_PROD:bluefin \
-            ${{ steps.filter.outputs.filter }} \
+          rclone copy R2_TEST:testing R2_PROD:bluefin \
+            --filter-from "${{ steps.preflight.outputs.filter_file }}" \
             --dry-run \
             --verbose
 
       - name: Promote ISOs (Production)
-        if: inputs.dry_run == false
+        if: ${{ inputs.dry_run == false }}
         run: |
+          set -euo pipefail
           echo "Promoting ISOs from Test to Production"
-          rclone sync R2_TEST:testing R2_PROD:bluefin \
-            ${{ steps.filter.outputs.filter }} \
+          rclone copy R2_TEST:testing R2_PROD:bluefin \
+            --filter-from "${{ steps.preflight.outputs.filter_file }}" \
             --verbose \
             --progress
 
       - name: Verify promotion
-        if: inputs.dry_run == false
+        if: ${{ inputs.dry_run == false }}
         run: |
+          set -euo pipefail
           echo "Files in Production bucket after promotion:"
-          rclone ls R2_PROD:bluefin ${{ steps.filter.outputs.filter }}
+          rclone ls R2_PROD:bluefin --filter-from "${{ steps.preflight.outputs.filter_file }}"
 
   promote-release:
     name: Promote GitHub Release
     needs: promote
-    if: inputs.dry_run == false
+    if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -108,45 +229,111 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Determine release tag
-        id: tag
+      - name: Determine production release tag
+        id: prod-tag
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ needs.promote.outputs.source_tag }}
         run: |
-          set -eoux pipefail
-          if [ -n "${{ inputs.release_tag }}" ]; then
-            TAG="${{ inputs.release_tag }}"
-          else
-            # Auto-detect latest prerelease
-            TAG=$(gh release list --limit 20 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease == true) | .tagName' | head -n1)
-            if [ -z "$TAG" ]; then
-              echo "No prerelease found to promote"
-              exit 1
-            fi
+          set -euo pipefail
+
+          if [ -z "${SOURCE_TAG}" ]; then
+            echo "Missing source tag from preflight outputs"
+            exit 1
           fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Promoting release: ${TAG}"
 
-      - name: Update release to full release
+          BASE_TAG="${SOURCE_TAG}-${{ inputs.variant }}"
+          TARGET_TAG="${BASE_TAG}"
+          COUNTER=1
+          while gh release view "${TARGET_TAG}" >/dev/null 2>&1; do
+            TARGET_TAG="${BASE_TAG}.${COUNTER}"
+            COUNTER=$((COUNTER + 1))
+          done
+
+          echo "target_tag=${TARGET_TAG}" >> "$GITHUB_OUTPUT"
+          echo "source_tag=${SOURCE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Source prerelease: ${SOURCE_TAG}"
+          echo "Target production tag: ${TARGET_TAG}"
+
+      - name: Download and select torrent assets from source prerelease
+        id: assets
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.tag }}
+          SOURCE_TAG: ${{ steps.prod-tag.outputs.source_tag }}
         run: |
-          set -eoux pipefail
+          set -euo pipefail
+          shopt -s nullglob
 
-          # Edit release to remove prerelease flag and mark as latest
-          gh release edit "${TAG}" \
-            --prerelease=false \
-            --latest \
-            --title "Bluefin ISOs ${TAG}"
+          RAW_DIR="${RUNNER_TEMP}/release-assets-raw"
+          SELECTED_DIR="${RUNNER_TEMP}/release-assets-selected"
+          mkdir -p "${RAW_DIR}" "${SELECTED_DIR}"
 
-          # Update release notes
-          gh release edit "${TAG}" --notes "$(cat <<'EOF'
+          gh release download "${SOURCE_TAG}" --dir "${RAW_DIR}" --pattern "*.iso.torrent"
+          gh release download "${SOURCE_TAG}" --dir "${RAW_DIR}" --pattern "*.iso.torrent-CHECKSUM"
+
+          for file in "${RAW_DIR}"/*; do
+            name=$(basename "${file}")
+            case "${{ inputs.variant }}" in
+              stable)
+                case "${name}" in
+                  *-stable-*.iso.torrent|*-stable-*.iso.torrent-CHECKSUM)
+                    cp "${file}" "${SELECTED_DIR}/"
+                    ;;
+                esac
+                ;;
+              lts)
+                case "${name}" in
+                  *-lts-hwe-*.iso.torrent|*-lts-hwe-*.iso.torrent-CHECKSUM)
+                    ;;
+                  *-dx-lts-*.iso.torrent|*-dx-lts-*.iso.torrent-CHECKSUM|*-lts-*.iso.torrent|*-lts-*.iso.torrent-CHECKSUM)
+                    cp "${file}" "${SELECTED_DIR}/"
+                    ;;
+                esac
+                ;;
+              lts-hwe)
+                case "${name}" in
+                  *-lts-hwe-*.iso.torrent|*-lts-hwe-*.iso.torrent-CHECKSUM)
+                    cp "${file}" "${SELECTED_DIR}/"
+                    ;;
+                esac
+                ;;
+            esac
+          done
+
+          selected=("${SELECTED_DIR}"/*)
+          if [ ${#selected[@]} -eq 0 ]; then
+            echo "No variant-matching torrent assets found on source prerelease '${SOURCE_TAG}'"
+            exit 1
+          fi
+
+          printf '%s\n' "${selected[@]}" > "${RUNNER_TEMP}/selected-assets.txt"
+          echo "selected_assets_file=${RUNNER_TEMP}/selected-assets.txt" >> "$GITHUB_OUTPUT"
+          echo "Selected ${#selected[@]} assets for release"
+
+      - name: Create production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ steps.prod-tag.outputs.source_tag }}
+          TARGET_TAG: ${{ steps.prod-tag.outputs.target_tag }}
+          SELECTED_ASSETS_FILE: ${{ steps.assets.outputs.selected_assets_file }}
+        run: |
+          set -euo pipefail
+          mapfile -t assets < "${SELECTED_ASSETS_FILE}"
+
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "No selected assets available to publish for target tag '${TARGET_TAG}'"
+            exit 1
+          fi
+
+          release_notes=$(cat <<EOF
           ## Bluefin ISO Torrents
+
+          Promoted from source prerelease: ${SOURCE_TAG}
+          Promotion variant: ${{ inputs.variant }}
 
           ### How to Download
 
-          1. Download a `.torrent` file below
+          1. Download a \.torrent file below
           2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)
           3. Torrents include web seeds -- downloads work immediately
 
@@ -158,6 +345,21 @@ jobs:
 
           sha256sum -c <filename>.torrent-CHECKSUM
           EOF
-          )"
+          )
 
-          echo "Successfully promoted release ${TAG} to production"
+          if [ "${{ inputs.variant }}" = "stable" ]; then
+            gh release create "${TARGET_TAG}" "${assets[@]}" \
+              --title "Bluefin ISOs ${SOURCE_TAG} (${{ inputs.variant }})" \
+              --notes "${release_notes}" \
+              --latest
+          elif [ "${{ inputs.variant }}" = "lts-hwe" ]; then
+            gh release create "${TARGET_TAG}" "${assets[@]}" \
+              --title "Bluefin ISOs ${SOURCE_TAG} (${{ inputs.variant }})" \
+              --notes "${release_notes}"
+          else
+            gh release create "${TARGET_TAG}" "${assets[@]}" \
+              --title "Bluefin ISOs ${SOURCE_TAG} (${{ inputs.variant }})" \
+              --notes "${release_notes}"
+          fi
+
+          echo "Created production release ${TARGET_TAG} from source prerelease ${SOURCE_TAG}"

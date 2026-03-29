@@ -224,6 +224,16 @@ jobs:
 
           sha256sum "${OUTPUT_NAME}.iso.torrent" | tee "${OUTPUT_NAME}.iso.torrent-CHECKSUM"
 
+      - name: Upload Run Torrent Artifacts
+        if: inputs.upload_r2 && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: torrent-${{ github.run_id }}-${{ matrix.image_version }}-${{ matrix.flavor }}-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            ${{ steps.rename.outputs.output_directory }}/${{ steps.image_ref.outputs.artifact_format }}.iso.torrent
+            ${{ steps.rename.outputs.output_directory }}/${{ steps.image_ref.outputs.artifact_format }}.iso.torrent-CHECKSUM
+
       - name: Upload to Job Artifacts
         if: inputs.upload_artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
@@ -257,42 +267,32 @@ jobs:
   create-prerelease:
     name: Create GitHub Prerelease
     needs: build
-    if: github.event_name != 'pull_request'
+    if: inputs.upload_r2 && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      RCLONE_CONFIG_R2_TYPE: s3
-      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
-      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID_2025 }}
-      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY_2025 }}
-      RCLONE_CONFIG_R2_REGION: auto
-      RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_2025 }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@8f52032f943acddc1c5670f437b94e031e78afc0 # master
-
-      - name: Install rclone
-        run: brew install rclone
-
-      - name: Download Torrent Files from R2
+      - name: Download Current Run Torrent Artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -eoux pipefail
           mkdir -p torrents
-          rclone copy R2:testing torrents \
-            --include "*.iso.torrent" \
-            --include "*.iso.torrent-CHECKSUM" \
-            --log-level INFO
+          gh run download "${{ github.run_id }}" \
+            --pattern "torrent-${{ github.run_id }}-*" \
+            --dir torrents
 
           echo "Downloaded torrent files:"
-          ls -lh torrents/
+          ls -lah torrents/
 
-          if [ -z "$(ls torrents/*.torrent 2>/dev/null)" ]; then
-            echo "No torrent files found in R2 testing bucket"
+          shopt -s globstar nullglob
+          torrent_files=(torrents/**/*.torrent)
+          if [ ${#torrent_files[@]} -eq 0 ]; then
+            echo "No torrent files found for current run"
             exit 1
           fi
 
@@ -323,39 +323,44 @@ jobs:
         run: |
           set -eoux pipefail
 
-          TORRENT_LIST=""
-          for f in torrents/*.torrent torrents/*.torrent-CHECKSUM; do
-            [ -f "$f" ] && TORRENT_LIST="${TORRENT_LIST} ${f}"
-          done
+          shopt -s globstar nullglob
+          TORRENT_FILES=(torrents/**/*.torrent torrents/**/*.torrent-CHECKSUM)
+
+          if [ ${#TORRENT_FILES[@]} -eq 0 ]; then
+            echo "No torrent assets available for prerelease"
+            exit 1
+          fi
+
+          NOTES_FILE="${RUNNER_TEMP}/prerelease-notes.md"
+          {
+            printf '%s\n' '## ⚠️ Prerelease - Testing Builds'
+            printf '\n'
+            printf '%s\n' 'These ISOs are automatically generated from successful builds and uploaded to the **testing** bucket.'
+            printf '\n'
+            printf '%s\n' '**Status**: Not yet promoted to production'
+            printf '%s\n' '**For**: Testing and validation only'
+            printf '\n'
+            printf '%s\n' 'Once validated, these builds can be promoted to production using the promotion workflow.'
+            printf '\n'
+            printf '%s\n' '### How to Download'
+            printf '\n'
+            printf '%s\n' '1. Download a `.torrent` file below'
+            printf '%s\n' '2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)'
+            printf '%s\n' '3. Torrents include web seeds -- downloads work immediately'
+            printf '\n'
+            printf '%s\n' '### Direct Downloads'
+            printf '\n'
+            printf '%s\n' 'ISOs are also available at https://docs.projectbluefin.io/downloads-testing'
+            printf '\n'
+            printf '%s\n' '### Verify'
+            printf '\n'
+            printf '%s\n' '```bash'
+            printf '%s\n' 'sha256sum -c <filename>.torrent-CHECKSUM'
+            printf '%s\n' '```'
+          } > "${NOTES_FILE}"
 
           gh release create "${VERSION}" \
             --prerelease \
-            --title "Bluefin ISOs ${VERSION} (Prerelease)" \
-            --notes "$(cat <<'EOF'
-          ## ⚠️ Prerelease - Testing Builds
-
-          These ISOs are automatically generated from successful builds and uploaded to the **testing** bucket.
-
-          **Status**: Not yet promoted to production
-          **For**: Testing and validation only
-
-          Once validated, these builds can be promoted to production using the promotion workflow.
-
-          ### How to Download
-
-          1. Download a `.torrent` file below
-          2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)
-          3. Torrents include web seeds -- downloads work immediately
-
-          ### Direct Downloads
-
-          ISOs are also available at https://docs.projectbluefin.io/downloads-testing
-
-          ### Verify
-
-          ```bash
-          sha256sum -c <filename>.torrent-CHECKSUM
-          ```
-          EOF
-          )" \
-            ${TORRENT_LIST}
+            --title "Bluefin ISOs ${VERSION} (Prerelease, run ${GITHUB_RUN_ID})" \
+            --notes-file "${NOTES_FILE}" \
+            "${TORRENT_FILES[@]}"
