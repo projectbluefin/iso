@@ -50,13 +50,26 @@ The ISO build system consists of independent, focused workflows:
                           │    workflow     │
                           └─────────────────┘
 
+┌─────────────────────────────────────────────────────────────┐
+│              build-iso-lts-hwe-testing                       │
+│           "Build LTS-HWE Testing ISOs"                       │
+│                                                              │
+│ ✓ workflow_dispatch                                          │
+│ ✓ schedule (weekly — every Monday)                          │
+│                                                              │
+│ ONLY authorized workflow for lts-hwe-testing tags           │
+│ Builds: 2 testing ISOs                                       │
+│ ├─► amd64 × main (image_tag: lts-hwe-testing)              │
+│ └─► arm64 × main (image_tag: lts-hwe-testing)              │
+└─────────────────────────────────────────────────────────────┘
+
 ═══════════════════════════════════════════════════════════════
 
 ┌─────────────────────────────────────────────────────────────┐
 │                    build-iso-all                             │
 │                   "Build All ISOs"                           │
 │                                                              │
-│ ✓ workflow_dispatch only (broken cron — see AGENTS.md)      │
+│ ✓ workflow_dispatch + schedule (monthly cron)               │
 │                                                              │
 │ Calls reusable workflow directly for each variant:          │
 │ ├─► stable  (image_tag: stable)                             │
@@ -102,9 +115,10 @@ Each workflow is **strictly scoped** to build only its designated ISO variant:
 | Workflow File | Builds | Does NOT Build |
 |---------------|--------|----------------|
 | `build-iso-lts.yml` | **4 LTS ISOs only** (DISABLED — no schedule)<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ Stable<br/>❌ LTS-HWE |
-| `build-iso-lts-hwe.yml` | **2 LTS-HWE ISOs only**<br/>- amd64 × main<br/>- arm64 × main | ❌ Stable<br/>❌ LTS |
+| `build-iso-lts-hwe.yml` | **2 LTS-HWE ISOs only** (production tags)<br/>- amd64 × main<br/>- arm64 × main | ❌ Stable<br/>❌ LTS<br/>❌ Testing tags |
+| `build-iso-lts-hwe-testing.yml` | **2 LTS-HWE testing ISOs only** (weekly schedule)<br/>- amd64 × main (lts-hwe-testing)<br/>- arm64 × main (lts-hwe-testing) | ❌ Stable<br/>❌ Production tags |
 | `build-iso-stable.yml` | **2 Stable ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE |
-| `build-iso-all.yml` | All 8 ISOs (calls reusable workflow directly) | N/A - orchestrator |
+| `build-iso-all.yml` | All 8 production ISOs (calls reusable workflow directly) | ❌ Testing tags |
 
 This strict separation ensures:
 - ✅ Predictable builds: You know exactly which ISOs each workflow produces
@@ -261,9 +275,9 @@ The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing 
 2. Click **"Run workflow"**
 3. Configure inputs:
    - **variant**: Select which ISOs to promote:
-     - `stable` - Promotes Stable ISOs only
-     - `lts` - Promotes LTS, LTS-HWE, and GDX ISOs only
-     - `all` - Promotes all ISOs (use with caution)
+      - `stable` - Promotes Stable ISOs only
+      - `lts` - Promotes LTS, LTS-HWE, and GDX ISOs only (currently unsafe — see LTS warning)
+      - `lts-hwe` - Promotes LTS-HWE ISOs only (excludes testing ISOs)
    - **dry_run**: ✅ Keep checked (default: `true`)
 4. Click **"Run workflow"**
 5. Review the workflow output to see what files would be promoted
@@ -288,8 +302,8 @@ The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing 
 | Variant | ISOs Promoted | Use Case |
 |---------|--------------|----------|
 | **stable** | • Stable ISOs (`*-stable-*.iso*`) | Regular stable release cycle |
-| **lts** | • LTS ISOs (`*-lts-*.iso*`)<br/>• LTS-HWE ISOs (`*-lts-hwe-*.iso*`)<br/>• GDX ISOs (`*-dx-lts-*.iso*`) | LTS release cycle |
-| **all** | • All ISOs (`*.iso`)<br/>• All checksums (`*.iso-CHECKSUM`) | Major releases or bulk updates |
+| **lts** | • LTS ISOs (`*-lts-*.iso*`)<br/>• LTS-HWE ISOs (`*-lts-hwe-*.iso*`)<br/>• GDX ISOs (`*-dx-lts-*.iso*`) | LTS release cycle (currently unsafe — see above) |
+| **lts-hwe** | • LTS-HWE ISOs (`*-lts-hwe-*.iso*`, excludes testing) | LTS-HWE-only release |
 
 #### Important Notes
 

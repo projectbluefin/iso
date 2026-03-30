@@ -48,6 +48,7 @@ before this breakage. They must not be overwritten.
   build-iso-stable.yml             # Caller: 2 Stable ISOs (amd64 × main, nvidia-open)
   build-iso-lts.yml                # Caller: 4 LTS ISOs — DISABLED (see above)
   build-iso-lts-hwe.yml            # Caller: 2 LTS-HWE ISOs (amd64/arm64 × main)
+  build-iso-lts-hwe-testing.yml    # Caller: 2 LTS-HWE testing ISOs — weekly schedule (ONLY authorized testing workflow)
   build-iso-all.yml                # Orchestrator: calls stable + lts-hwe in parallel
   reusable-build-iso-anaconda.yml  # Core build logic (matrix, build, prerelease)
   promote-iso.yml                  # Promotes testing → production R2 + GitHub release
@@ -100,17 +101,22 @@ All callers share the same structure:
 - `secrets: inherit` — no `permissions:` block in caller
 - Inputs: `image_version`, `image_tag`, `upload_artifacts`, `upload_r2`
 
-**LTS and LTS-HWE** callers have an `image_tag` choice input for selecting
-production vs testing image tags:
-- `build-iso-lts.yml`: `lts` or `lts-testing`
-- `build-iso-lts-hwe.yml`: `lts-hwe` or `lts-hwe-testing`
+**`build-iso-lts.yml`** has an `image_tag` choice input: `lts` or `lts-testing`.
+
+**`build-iso-lts-hwe.yml`** has a single `image_tag` choice: `lts-hwe` (production
+only). The `lts-hwe-testing` option was removed from this workflow — use
+`build-iso-lts-hwe-testing.yml` for testing tags.
+
+**`build-iso-lts-hwe-testing.yml`** is the ONLY authorized workflow for
+`lts-hwe-testing` ISOs. It hardcodes `image_tag: lts-hwe-testing` and runs on a
+weekly schedule (every Monday at 06:17 UTC). Do not use testing tags in any other
+workflow.
 
 **Stable** hardcodes `image_tag: stable`. No testing tag variant exists for Stable.
 
 **`build-iso-all.yml`** calls the reusable workflow directly (not the caller
-workflows), hardcoding the correct tag for each variant. Known issues:
-- Cron `"0 3 1 1"` is 4 fields; valid cron requires 5. Scheduled trigger does not
-  fire — only `workflow_dispatch` works.
+workflows), hardcoding the correct tag for each variant. The monthly cron
+`"0 3 1 * *"` is valid 5-field syntax and fires correctly. Known latent bug:
 - The LTS job references `inputs.image_tag` which is not a defined input; it always
   resolves to `'lts'` (correct behavior, but latent bug).
 
@@ -168,17 +174,17 @@ from the testing bucket to the production bucket (`R2_PROD:bluefin`), then conve
 the GitHub prerelease to a full release.
 
 Inputs:
-- `variant`: `stable`, `lts`, or `all`
+- `variant`: `stable`, `lts`, or `lts-hwe`
 - `release_tag`: specific tag to promote, or auto-detects latest prerelease
 - `dry_run`: default `true` — always preview before running live
 
 Filter patterns per variant:
 
-| Variant  | Files matched                                                              |
-|----------|----------------------------------------------------------------------------|
-| `stable` | `*-stable-*.iso*`                                                         |
-| `lts`    | `*-lts-*.iso*`, `*-lts-hwe-*.iso*`, `*-dx-lts-*.iso*`                   |
-| `all`    | `*.iso`, `*.iso-CHECKSUM`, `*.iso.torrent`, `*.iso.torrent-CHECKSUM`      |
+| Variant   | Files matched                                                              |
+|-----------|----------------------------------------------------------------------------|
+| `stable`  | `*-stable-*.iso*`                                                         |
+| `lts`     | `*-lts-*.iso*`, `*-lts-hwe-*.iso*`, `*-dx-lts-*.iso*`                   |
+| `lts-hwe` | `*-lts-hwe-*.iso*` (excludes `*-lts-hwe-testing-*`)                      |
 
 > ⚠️ Do NOT run with `variant: lts` or `variant: all` while LTS builds are broken.
 > Both patterns match LTS filenames and will overwrite production ISOs.
