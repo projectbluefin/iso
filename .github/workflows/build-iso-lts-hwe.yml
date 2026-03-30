@@ -8,11 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag to build from'
+        description: 'Image tag to build from (production only; for lts-hwe-testing use build-iso-lts-hwe-testing.yml)'
         type: choice
         options:
           - lts-hwe
-          - lts-hwe-testing
         default: lts-hwe
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
@@ -34,4 +33,4 @@ jobs:
       image_version: lts-hwe  # Strictly builds LTS-HWE ISOs only
       image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts-hwe' }}
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+      upload_r2: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_r2 }}

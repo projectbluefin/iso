@@ -108,15 +108,27 @@ jobs:
             exit 1
           fi
 
+          # Build an rclone filter file for this variant.
+          #
+          # WHY the '- *-testing-*' rule is first in every variant block:
+          # Testing ISOs (e.g. bluefin-lts-hwe-testing-x86_64.iso) share a naming
+          # prefix with their production counterparts. Without an explicit exclusion,
+          # the production include rules below would match them:
+          #   '+ *-lts-hwe-*.iso*' matches both lts-hwe AND lts-hwe-testing files.
+          # Placing '- *-testing-*' first ensures rclone discards testing artifacts
+          # before evaluating the production include rules, regardless of what files
+          # happen to be present in the testing bucket.
           FILTER_FILE="${RUNNER_TEMP}/rclone-filter-${{ inputs.variant }}.txt"
           case "${{ inputs.variant }}" in
             stable)
               printf '%s\n' \
+                '- *-testing-*' \
                 '+ *-stable-*.iso*' \
                 '- *' > "${FILTER_FILE}"
               ;;
             lts)
               printf '%s\n' \
+                '- *-testing-*' \
                 '- *-lts-hwe-*.iso*' \
                 '+ *-dx-lts-*.iso*' \
                 '+ *-lts-*.iso*' \
@@ -124,6 +136,7 @@ jobs:
               ;;
             lts-hwe)
               printf '%s\n' \
+                '- *-testing-*' \
                 '+ *-lts-hwe-*.iso*' \
                 '- *' > "${FILTER_FILE}"
               ;;
@@ -139,6 +152,13 @@ jobs:
 
           SOURCE_VARIANT_ASSET_COUNT=0
           while IFS= read -r asset_name; do
+            # Exclude testing artifacts from the production asset count.
+            # A prerelease may contain both production and testing torrents
+            # (e.g. from a mixed build run). Only production assets count
+            # toward the minimum required for a valid promotion.
+            case "${asset_name}" in
+              *-testing-*) continue ;;
+            esac
             case "${{ inputs.variant }}" in
               stable)
                 case "${asset_name}" in
@@ -274,6 +294,14 @@ jobs:
 
           for file in "${RAW_DIR}"/*; do
             name=$(basename "${file}")
+            # Exclude testing artifacts from the production GitHub release.
+            # A prerelease may contain both production and testing torrents
+            # (e.g. lts-hwe and lts-hwe-testing from the same build window).
+            # The production include rules below would otherwise match testing
+            # filenames by prefix — this guard is the last line of defense.
+            case "${name}" in
+              *-testing-*) continue ;;
+            esac
             case "${{ inputs.variant }}" in
               stable)
                 case "${name}" in

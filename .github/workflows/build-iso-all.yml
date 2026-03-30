@@ -3,9 +3,8 @@ name: Build All ISOs
 # Orchestrator workflow that calls ALL individual ISO build workflows
 # Builds ALL production ISOs with production tags only
 #
-# For testing tags (-testing), use individual variant workflows:
-#   - build-iso-lts.yml → select lts-testing
-#   - build-iso-lts-hwe.yml → select lts-hwe-testing
+# For testing tags (-testing), use the dedicated testing workflow:
+#   - build-iso-lts-hwe-testing.yml (the ONLY authorized workflow for testing tags)
 #
 # Total: 8 production ISOs across all variants:
 #   - build-iso-stable   → 2 Stable ISOs (amd64 × main, amd64 × nvidia-open)
@@ -32,9 +31,9 @@ jobs:
     secrets: inherit
     with:
       image_version: lts  # Strictly LTS only
-      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'lts' }}
+      image_tag: lts  # Hardcoded: build-iso-all.yml only builds production tags
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+      upload_r2: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_r2 }}
 
   build-iso-lts-hwe:
     name: Build LTS-HWE ISOs
@@ -44,7 +43,7 @@ jobs:
       image_version: lts-hwe  # Strictly LTS-HWE only
       image_tag: lts-hwe
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+      upload_r2: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_r2 }}
 
   build-iso-stable:
     name: Build Stable ISOs
@@ -54,4 +53,4 @@ jobs:
       image_version: stable  # Strictly Stable only
       image_tag: stable
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+      upload_r2: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_r2 }}

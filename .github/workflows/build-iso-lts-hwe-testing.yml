@@ -1,6 +1,10 @@
 ---
 name: Build LTS-HWE Testing ISOs
-# This workflow ONLY builds LTS-HWE testing ISOs
+# This is the ONLY authorized workflow for building lts-hwe-testing ISOs.
+# Testing tags (lts-hwe-testing) must NOT be used in build-iso-lts-hwe.yml or
+# build-iso-all.yml — those workflows are for production tags only.
+# Note: choice-input removal enforces this at the UI/CLI level; direct API
+# callers must follow this policy by convention.
 # Builds: 2 LTS-HWE testing ISOs
 #   - amd64 x main
 #   - arm64 x main
@@ -27,4 +31,4 @@ jobs:
       image_version: lts-hwe
       image_tag: lts-hwe-testing
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
-      upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
+      upload_r2: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_r2 }}
