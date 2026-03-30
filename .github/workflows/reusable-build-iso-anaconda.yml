@@ -235,6 +235,15 @@ jobs:
             ${{ steps.rename.outputs.output_directory }}/${{ steps.image_ref.outputs.artifact_format }}.iso.torrent
             ${{ steps.rename.outputs.output_directory }}/${{ steps.image_ref.outputs.artifact_format }}.iso.torrent-CHECKSUM
 
+      - name: Upload Run CHECKSUM Artifacts
+        if: inputs.upload_r2 && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: checksum-${{ github.run_id }}-${{ matrix.image_version }}-${{ matrix.flavor }}-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            ${{ steps.rename.outputs.output_directory }}/${{ steps.image_ref.outputs.artifact_format }}.iso-CHECKSUM
+
       - name: Upload to Job Artifacts
         if: inputs.upload_artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
@@ -297,6 +306,26 @@ jobs:
             exit 1
           fi
 
+      - name: Download Current Run CHECKSUM Artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eoux pipefail
+          mkdir -p checksums
+          gh run download "${{ github.run_id }}" \
+            --pattern "checksum-${{ github.run_id }}-*" \
+            --dir checksums
+
+          echo "Downloaded checksum files:"
+          ls -lah checksums/
+
+          shopt -s globstar nullglob
+          checksum_files=(checksums/**/*.iso-CHECKSUM)
+          if [ ${#checksum_files[@]} -eq 0 ]; then
+            echo "No ISO checksum files found for current run"
+            exit 1
+          fi
+
       - name: Determine Release Version
         id: version
         env:
@@ -326,9 +355,15 @@ jobs:
 
           shopt -s globstar nullglob
           TORRENT_FILES=(torrents/**/*.torrent torrents/**/*.torrent-CHECKSUM)
+          CHECKSUM_FILES=(checksums/**/*.iso-CHECKSUM)
 
           if [ ${#TORRENT_FILES[@]} -eq 0 ]; then
             echo "No torrent assets available for prerelease"
+            exit 1
+          fi
+
+          if [ ${#CHECKSUM_FILES[@]} -eq 0 ]; then
+            echo "No ISO checksum assets available for prerelease"
             exit 1
           fi
 
@@ -355,8 +390,16 @@ jobs:
             printf '\n'
             printf '%s\n' '### Verify'
             printf '\n'
+            printf '%s\n' 'Verify your ISO download using the `.iso-CHECKSUM` files attached to this release:'
+            printf '\n'
             printf '%s\n' '```bash'
-            printf '%s\n' 'sha256sum -c <filename>.torrent-CHECKSUM'
+            printf '%s\n' 'sha256sum -c <filename>.iso-CHECKSUM'
+            printf '%s\n' '```'
+            printf '\n'
+            printf '%s\n' 'Verify a downloaded torrent file using the `.torrent-CHECKSUM` files:'
+            printf '\n'
+            printf '%s\n' '```bash'
+            printf '%s\n' 'sha256sum -c <filename>.iso.torrent-CHECKSUM'
             printf '%s\n' '```'
           } > "${NOTES_FILE}"
 
@@ -364,4 +407,5 @@ jobs:
             --prerelease \
             --title "Bluefin ISOs ${VERSION} (Prerelease, run ${GITHUB_RUN_ID})" \
             --notes-file "${NOTES_FILE}" \
-            "${TORRENT_FILES[@]}"
+            "${TORRENT_FILES[@]}" \
+            "${CHECKSUM_FILES[@]}"
