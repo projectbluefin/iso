@@ -277,7 +277,13 @@ jobs:
   create-prerelease:
     name: Create GitHub Prerelease
     needs: build
-    if: inputs.upload_r2 && github.event_name != 'pull_request'
+    # Run when builds complete (success or partial failure) — skip only on cancellation.
+    # This ensures a prerelease is published even when arm64 builds fail, so
+    # the amd64 ISOs that succeeded are still available on the releases page.
+    if: >-
+      inputs.upload_r2 &&
+      github.event_name != 'pull_request' &&
+      needs.build.result != 'cancelled'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -346,10 +352,56 @@ jobs:
 
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Build Platform Status
+        id: build_status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eoux pipefail
+          STATUS_FILE="${RUNNER_TEMP}/build-status.md"
+
+          # Fetch all jobs for this run and filter to the build matrix jobs
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+            --paginate \
+            --jq '.jobs[]' > /tmp/all-jobs.json
+
+          {
+            printf '%s\n' '### Build Status'
+            printf '\n'
+            printf '%s\n' '| Platform | Variant | Flavor | Result |'
+            printf '%s\n' '|----------|---------|--------|--------|'
+
+            # Extract build matrix jobs — name pattern: "Build ISOs (platform, flavor, variant)"
+            jq -r 'select(.name | test("Build ISOs \\(")) |
+              [
+                (.name | capture("Build ISOs \\((?P<platform>[^,]+), (?P<flavor>[^,]+), (?P<variant>[^)]+)\\)") | .platform, .variant, .flavor),
+                .conclusion
+              ] | @tsv' /tmp/all-jobs.json | sort | \
+            while IFS=$'\t' read -r platform variant flavor conclusion; do
+              case "$conclusion" in
+                success)  icon="✅" ;;
+                failure)  icon="❌" ;;
+                skipped)  icon="⏭️" ;;
+                *)        icon="⏳" ;;
+              esac
+              printf '| %s | %s | %s | %s %s |\n' "$platform" "$variant" "$flavor" "$icon" "$conclusion"
+            done
+
+            printf '\n'
+            # Warn if any builds failed so readers know some ISOs may be missing
+            if jq -e 'select(.name | test("Build ISOs \\(")) | select(.conclusion == "failure")' /tmp/all-jobs.json > /dev/null 2>&1; then
+              printf '%s\n' '> **Note**: Some platform builds failed. Only ISOs from successful builds are attached.'
+              printf '\n'
+            fi
+          } > "${STATUS_FILE}"
+
+          echo "status_file=${STATUS_FILE}" >> "${GITHUB_OUTPUT}"
+
       - name: Create GitHub Prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
+          BUILD_STATUS_FILE: ${{ steps.build_status.outputs.status_file }}
         run: |
           set -eoux pipefail
 
@@ -378,6 +430,7 @@ jobs:
             printf '\n'
             printf '%s\n' 'Once validated, these builds can be promoted to production using the promotion workflow.'
             printf '\n'
+            cat "${BUILD_STATUS_FILE}"
             printf '%s\n' '### How to Download'
             printf '\n'
             printf '%s\n' '1. Download a `.torrent` file below'
