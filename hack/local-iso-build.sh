@@ -48,8 +48,15 @@ else
 	FLAVOR_SUFFIX=""
 fi
 
+# Map variant name to image tag
+if [ "$variant" = "bluefin" ]; then
+	IMAGE_TAG="stable"
+else
+	IMAGE_TAG="$variant"
+fi
+
 if [ "$repo" = "ghcr" ]; then
-	TARGET_IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${variant}${FLAVOR_SUFFIX}"
+	TARGET_IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${IMAGE_TAG}${FLAVOR_SUFFIX}"
 elif [ "$repo" = "local" ]; then
 	TARGET_IMAGE_NAME="localhost/${IMAGE_NAME}:${variant}${FLAVOR_SUFFIX}"
 else
@@ -69,16 +76,22 @@ echo -e "  \033[1;32mHook Script:\033[0m   $hook_script"
 echo -e "  \033[1;32mFlatpaks Source:\033[0m $flatpaks_source"
 echo -e "\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n"
 
-# Clean up any previous copy of Titanoboa that might have sudo permissions
-if [ -d "$BUILD_DIR" ]; then
-	echo "Cleaning up previous Titanoboa build directory..."
-	sudo rm -rf "$BUILD_DIR"
+# Clone or update Titanoboa
+if [ ! -f "$BUILD_DIR/Justfile" ]; then
+	echo "Fetching Titanoboa..."
+	# Clone to temp then copy files (BUILD_DIR may have root-owned work/ from previous runs)
+	git clone https://github.com/hanthor/titanoboa "/tmp/titanoboa-fresh-$$"
+	mkdir -p "$BUILD_DIR"
+	rsync -a --exclude='work/' "/tmp/titanoboa-fresh-$$/" "$BUILD_DIR/"
+	rm -rf "/tmp/titanoboa-fresh-$$"
 fi
-
-# Clone Titanoboa if not already present
-if [ ! -d "$BUILD_DIR" ]; then
-	echo "Cloning Titanoboa builder..."
-	git clone https://github.com/hanthor/titanoboa "$BUILD_DIR"
+# Clean work dir from previous build using Titanoboa's own clean target
+if [ -d "$BUILD_DIR/work" ]; then
+	echo "Cleaning previous work dir via privileged container..."
+	sudo /usr/bin/podman run --rm --privileged \
+		-v "$BUILD_DIR/work:/work" \
+		alpine sh -c 'rm -rf /work/*' 2>/dev/null || true
+	rm -rf "$BUILD_DIR/work" 2>/dev/null || true
 fi
 
 # Handle flatpaks file
@@ -115,6 +128,14 @@ sed -i 's/setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_conte
 echo "Patching Titanoboa Justfile to add --device /dev/fuse to builder..."
 sed -i 's/--security-opt label=disable/--security-opt label=disable --device \/dev\/fuse/' "$BUILD_DIR/Justfile"
 
+# Patch out root check so we can build without sudo
+echo "Patching Titanoboa Justfile to remove root check..."
+sed -i "s/if \[ \`id -u\` -gt 0 \]; then echo.*Must be root.*exit 1; fi/echo 'Skipping root check'/" "$BUILD_DIR/Justfile"
+
+# Patch clean recipe to handle root-owned overlay files via privileged podman
+echo "Patching Titanoboa clean recipe to handle root-owned files..."
+sed -i '/^@clean:/,/^[^ @]/{s|rm -rf {{ absolute_path(workdir) }}|{{ PODMAN }} run --rm --privileged -v {{ absolute_path(workdir) }}:/work alpine sh -c \x27rm -rf /work/*\x27 2>/dev/null \|\| true \&\& rm -rf {{ absolute_path(workdir) }} 2>/dev/null \|\| true|}' "$BUILD_DIR/Justfile"
+
 echo "Copying hook script to $BUILD_DIR directory..."
 cp "$hook_script" "$BUILD_DIR/hook.sh"
 
@@ -122,10 +143,12 @@ cp "$hook_script" "$BUILD_DIR/hook.sh"
 cd "$BUILD_DIR"
 
 # Run the Titanoboa build command
+# Titanoboa needs root podman for loop device access during ISO creation
 echo "Running Titanoboa build..."
-sudo TITANOBOA_BUILDER_DISTRO="$IMAGE_DISTRO" \
+export PODMAN="sudo /usr/bin/podman"
+TITANOBOA_BUILDER_DISTRO="$IMAGE_DISTRO" \
 	HOOK_post_rootfs="hook.sh" \
-    just build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
+    just PODMAN="sudo /usr/bin/podman" build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
 
 echo "Titanoboa build process finished."
 
@@ -136,8 +159,7 @@ if [ -f "$ISO_PATH" ]; then
     OUTPUT_NAME="${IMAGE_NAME}-${variant}${FLAVOR_SUFFIX}-${TIMESTAMP}.iso"
 
     echo "Copying ISO to $REPO_ROOT/$OUTPUT_NAME..."
-    sudo cp "$ISO_PATH" "$REPO_ROOT/$OUTPUT_NAME"
-    sudo chown "$(id -u):$(id -g)" "$REPO_ROOT/$OUTPUT_NAME"
+    cp "$ISO_PATH" "$REPO_ROOT/$OUTPUT_NAME"
 
     echo -e "\n\033[1;32mSUCCESS: ISO available at: $REPO_ROOT/$OUTPUT_NAME\033[0m"
 else
