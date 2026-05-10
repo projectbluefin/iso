@@ -105,6 +105,7 @@ default_partitioning =
 
 [User Interface]
 custom_stylesheet = /usr/share/anaconda/pixmaps/silverblue/fedora-silverblue.css
+webui_web_engine = slitherer
 hidden_spokes =
     NetworkSpoke
     PasswordSpoke
