@@ -43,7 +43,6 @@ systemctl disable uupd.timer
 systemctl disable ublue-system-setup.service
 # systemctl disable ublue-guest-user.service
 # systemctl disable check-sb-key.service
-# systemctl --global disable ublue-flatpak-manager.service
 systemctl --global disable podman-auto-update.timer
 systemctl --global disable ublue-user-setup.service
 
