@@ -53,11 +53,6 @@ systemctl disable flatpak-preinstall.service
 systemctl --global disable podman-auto-update.timer
 systemctl --global disable ublue-user-setup.service
 
-# HACK for https://bugzilla.redhat.com/show_bug.cgi?id=2433186
-rpm --erase --nodeps --justdb generic-logos
-dnf download fedora-logos
-rpm -i --justdb fedora-logos*.rpm
-
 # Configure Anaconda
 
 # Install Anaconda, Webui if >= F42
@@ -70,8 +65,6 @@ SPECS=(
 )
 
 dnf install -y "${SPECS[@]}"
-
-rpm --erase --nodeps --justdb fedora-logos
 
 # Anaconda Profile Detection
 
