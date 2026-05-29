@@ -344,6 +344,26 @@ Contributions are welcome! Please ensure:
 
 See main [Bluefin repository](https://github.com/ublue-os/bluefin) for license information.
 
+## Troubleshooting
+
+### Drive not detected during install
+
+If the installer does not show your internal drive (`lsblk` also shows nothing),
+you may have **Intel Rapid Storage Technology (RST)** — also called "Optane" —
+enabled in your BIOS/UEFI. RST puts the SATA controller into RAID mode, hiding
+drives from the standard AHCI driver that Linux uses.
+
+This affects all Linux distributions, not just Bluefin.
+
+**Fix:** Enter your BIOS/UEFI setup (usually F2, Del, or F12 during boot) and
+look for SATA Operation or Storage Controller settings. Switch from
+"RAID" / "RST with Optane" to **"AHCI."**
+
+> ⚠️  Changing this setting on a dual-boot system will prevent Windows from
+> booting until you reinstall or reconfigure the Windows storage driver.
+
+After switching to AHCI, reboot and the installer should detect your drive.
+
 ## Related Projects
 
 - [Bluefin](https://github.com/ublue-os/bluefin) - Main Bluefin image repository
