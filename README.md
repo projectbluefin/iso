@@ -191,6 +191,14 @@ file list" step of `reusable-build-iso-anaconda.yml`.
 - Podman or Docker
 - Pre-commit
 
+### Pre-installation Checks (End Users)
+
+> **⚠️ Intel RST / Optane** — If the installer cannot detect your hard drive,
+you may have Intel Rapid Storage Technology (RST) or Optane enabled in your
+BIOS. This affects all Fedora-based installers (including Silverblue).
+Disable RST/Optane in your BIOS/UEFI settings before installing.
+See [#49](https://github.com/projectbluefin/iso/issues/49) for details.
+
 ### Validation
 ```bash
 # Validate all files
