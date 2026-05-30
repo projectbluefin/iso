@@ -16,9 +16,13 @@ Workflows and configuration files needed to build bootable Bluefin ISOs for inst
 ## ⚠️ LTS ISO Status: DISABLED
 
 **LTS (non-HWE) ISOs are currently broken.** Anaconda does not work correctly on
-the LTS base image. The `build-iso-lts.yml` workflow has no schedule and will not
-fire automatically. Working LTS ISOs remain in the production bucket from before
-this breakage and must not be overwritten.
+the LTS base image. This affects **all LTS flavors** including `main` and `gdx`
+(Gnome Developer Experience). The `build-iso-lts.yml` workflow has no schedule and
+will not fire automatically. Working LTS ISOs remain in the production bucket from
+before this breakage and must not be overwritten.
+
+**Known symptom:** The installer completes normally but account creation fails
+on first boot, leaving the system in an unusable state (#51).
 
 **Do not** run `promote-iso.yml` with `variant: lts` or `variant: all` — both
 patterns match `*-lts-*.iso*` filenames and would overwrite production ISOs.
