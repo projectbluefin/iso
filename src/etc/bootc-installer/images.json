@@ -1,0 +1,16 @@
+{
+  "default_image": "ghcr.io/ublue-os/bluefin:stable",
+  "fallback_flatpaks": [],
+  "images": [
+    {
+      "name": "Bluefin",
+      "imgref": "ghcr.io/ublue-os/bluefin:stable",
+      "desc": "Cloud-native developer workstation",
+      "icon": "resource:///org/bootcinstaller/Installer/images/bluefin.png",
+      "bootloader": "grub2",
+      "filesystem": "btrfs",
+      "needs_user_creation": true,
+      "flatpak_var_path": "var"
+    }
+  ]
+}

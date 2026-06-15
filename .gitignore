@@ -8,9 +8,11 @@
 previous.manifest.json
 changelog.md
 output.env
+output/
+*.sfs
+*.tar
 
 # Generated files
-iso_files/bluefin.repo
 
 # Temporary files
 *.tmp
