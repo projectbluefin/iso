@@ -176,9 +176,11 @@ iso-sd-boot target:
 
         echo 'Exporting squashed OCI image to archive...'
         echo '=== Squashing '"${PAYLOAD_IMAGE}"' to single layer (avoids VFS explosion) ==='
-        SQUASH_CTR=\$(buildah from --pull-never '"${PAYLOAD_IMAGE}"')
-        buildah commit --squash \"\${SQUASH_CTR}\" oci-archive:\${PAYLOAD_OCI}:'"${PAYLOAD_IMAGE}"'
-        buildah rm \"\${SQUASH_CTR}\"
+        SQUASH_CTR=\$(podman create --pull=never '"${PAYLOAD_IMAGE}"')
+        podman commit -s \"\${SQUASH_CTR}\" squash-temp-image
+        podman save -o \"\${PAYLOAD_OCI}\" --format oci-archive squash-temp-image
+        podman rm \"\${SQUASH_CTR}\"
+        podman rmi squash-temp-image
         podman rmi '"${PAYLOAD_IMAGE}"' || true
 
         echo 'Importing Bluefin OCI image into squashfs containers-storage...'
