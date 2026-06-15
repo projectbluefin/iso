@@ -105,8 +105,10 @@ rm -f /usr/share/applications/org.gnome.Tour.desktop
 
 # Override the bootc-installer flatpak's desktop entry so it appears as
 # "Bluefin Installer" with the bluefin icon instead of "bootc Installer (Devel)".
-mkdir -p /usr/local/share/applications
-cat > /usr/local/share/applications/org.bootcinstaller.Installer.Devel.desktop << 'DESKTOPEOF'
+# On Fedora/ostree /usr/local is a symlink to /var/usrlocal — resolve it.
+LOCAL_APPS=$(realpath /usr/local 2>/dev/null || echo /usr/local)/share/applications
+mkdir -p "${LOCAL_APPS}" || { LOCAL_APPS=/usr/share/applications; mkdir -p "${LOCAL_APPS}"; }
+cat > "${LOCAL_APPS}/org.bootcinstaller.Installer.Devel.desktop" << 'DESKTOPEOF'
 [Desktop Entry]
 Name=Bluefin Installer
 Exec=/usr/bin/flatpak run --branch=master --arch=x86_64 --command=bootc-installer org.bootcinstaller.Installer.Devel
