@@ -170,8 +170,6 @@ GDMEOF
 # ── /var/tmp tmpfs ────────────────────────────────────────────────────────────
 # The live overlayfs puts /var on a small RAM overlay.  bootc needs substantial
 # space in /var/tmp when staging an install; mount a dedicated tmpfs there.
-# Size=16000M (16G): VFS container storage copies the full OCI image (~5GB)
-# for each writable layer; the embedded base + one writable copy needs ~10GB.
 cat > /usr/lib/systemd/system/var-tmp.mount << 'UNITEOF'
 [Unit]
 Description=Large tmpfs for /var/tmp in the live environment
@@ -180,43 +178,12 @@ Description=Large tmpfs for /var/tmp in the live environment
 What=tmpfs
 Where=/var/tmp
 Type=tmpfs
-Options=size=16000M,nr_inodes=2m
+Options=size=8G,nr_inodes=1m
 
 [Install]
 WantedBy=local-fs.target
 UNITEOF
 systemctl enable var-tmp.mount
-
-# ── Container storage relocation ─────────────────────────────────────────────
-# VFS storage in the squashfs is read-only.  fisherman/bootc needs to create
-# writable container layers (VFS copies the full image).  Copy the embedded
-# containers-storage to the /var/tmp tmpfs and bind-mount it over the original
-# path so fisherman can create writable containers.
-cat > /usr/lib/systemd/system/containers-storage-relocate.service << 'RELOCEOF'
-[Unit]
-Description=Relocate containers-storage to writable tmpfs
-DefaultDependencies=no
-After=var-tmp.mount
-Before=podman.service container-getty@.service
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c '\
-  SRC=/var/lib/containers/storage; \
-  DST=/var/tmp/containers-storage; \
-  if [ -d "$SRC/vfs" ] && [ ! -f "$DST/.relocated" ]; then \
-    echo "Copying VFS containers-storage to tmpfs..."; \
-    mkdir -p "$DST"; \
-    cp -a "$SRC/." "$DST/"; \
-    touch "$DST/.relocated"; \
-  fi; \
-  mount --bind "$DST" "$SRC"'
-RemainAfterExit=yes
-
-[Install]
-WantedBy=local-fs.target
-RELOCEOF
-systemctl enable containers-storage-relocate.service
 
 # ── Live-ready marker service ─────────────────────────────────────────────────
 # Prints BLUEFIN_LIVE_READY to the serial console after display-manager.service
@@ -356,13 +323,13 @@ EOF
 mkdir -p /usr/lib/tmpfiles.d
 echo 'f /etc/hostname 0644 - - - bluefin-live' > /usr/lib/tmpfiles.d/live-hostname.conf
 
-# ── VFS containers-storage ────────────────────────────────────────────────────
-# The ISO embeds the Bluefin OCI image as VFS containers-storage in the squashfs
-# for offline installation.  Configure podman to use the VFS driver so the
-# pre-embedded image is visible without a network pull.
+# ── Container storage ────────────────────────────────────────────────────────
+# Use overlay driver for space-efficient container operations.
+# The embedded OCI in the squashfs is available via skopeo/podman pull
+# from the registry. Overlay avoids VFS's full-image copy per layer.
 cat > /etc/containers/storage.conf << 'STOREOF'
 [storage]
-driver = "vfs"
+driver = "overlay"
 runroot = "/run/containers/storage"
 graphroot = "/var/lib/containers/storage"
 STOREOF
