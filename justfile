@@ -528,6 +528,7 @@ luks-boot target:
 # ── QEMU-native LUKS test (used by CI; mirrors the libvirt recipes) ───────────
 
 luks-qemu-disk := "/var/tmp/bluefin-luks-install.qcow2"
+luks-qemu-cs-disk := "/var/tmp/bluefin-luks-cs.qcow2"
 luks-qemu-monitor-live := "/tmp/bluefin-qemu-live.sock"
 luks-qemu-monitor-installed := "/tmp/bluefin-qemu-installed.sock"
 luks-qemu-serial-live := "/tmp/bluefin-qemu-live-serial.log"
@@ -541,7 +542,7 @@ e2e target:
     echo "=== Step 1/2: Building ISO (debug={{ debug }}, installer_channel={{ installer_channel }}) ==="
     just debug={{ debug }} installer_channel={{ installer_channel }} output_dir={{ output_dir }} iso-sd-boot {{ target }}
     echo "=== Step 2/2: LUKS end-to-end test ==="
-    sudo rm -f "{{ luks-qemu-disk }}" "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-monitor-installed }}" \
+    sudo rm -f "{{ luks-qemu-disk }}" "{{ luks-qemu-cs-disk }}" "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-monitor-installed }}" \
                "{{ luks-qemu-serial-live }}" "{{ luks-qemu-serial-installed }}"
     just luks-test-qemu {{ target }}
 
@@ -587,6 +588,7 @@ luks-boot-qemu-live target:
     [[ -z "$OVMF_CODE" ]] && { echo "OVMF firmware not found" >&2; exit 1; }
 
     [[ -f "{{ luks-qemu-disk }}" ]] || qemu-img create -f qcow2 "{{ luks-qemu-disk }}" 64G
+    [[ -f "{{ luks-qemu-cs-disk }}" ]] || qemu-img create -f qcow2 "{{ luks-qemu-cs-disk }}" 25G
     sudo rm -f "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-serial-live }}"
 
     echo "Booting live ISO: $ISO"
@@ -611,6 +613,8 @@ luks-boot-qemu-live target:
         -device scsi-cd,drive=iso \
         -drive "if=none,id=disk,file={{ luks-qemu-disk }},format=qcow2" \
         -device virtio-blk-pci,drive=disk \
+        -drive "if=none,id=csdisk,file={{ luks-qemu-cs-disk }},format=qcow2" \
+        -device virtio-blk-pci,drive=csdisk \
         -netdev "user,id=net0,hostfwd=tcp::{{ luks-qemu-ssh-port }}-:22" \
         -device virtio-net-pci,netdev=net0 \
         -monitor "unix:{{ luks-qemu-monitor-live }},server,nowait" \
@@ -656,11 +660,12 @@ luks-install-qemu target:
     $SCP "${RECIPE_TMP}" liveuser@127.0.0.1:/tmp/luks-recipe.json
 
     # ostree images need substantial container storage for podman pull.
-    # Carve a 20GB partition from the end of the target disk for /var/lib/containers.
-    echo "Preparing disk-based container storage on target disk..."
+    # Use the second disk (/dev/vdb, 25G) to avoid fisherman wiping /dev/vda.
+    # VFS driver works on any filesystem; overlay-on-overlayfs is unsupported.
+    echo "Preparing disk-based container storage on /dev/vdb..."
     CS_SETUP=$(mktemp /tmp/cs-setup-XXXXXX.sh)
     trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}'" EXIT
-    printf '#!/bin/bash\nset -euo pipefail\nDISK=%s\nLAST_SEC=$(blockdev --getsz "$DISK")\nCS_START=$((LAST_SEC - 41943040))\nif [ $CS_START -lt 1 ]; then echo "Disk too small, skipping"; exit 0; fi\necho "Creating 20GB partition at sector $CS_START on $DISK..."\necho "start=$CS_START, type=linux" | sfdisk --no-reread -q "$DISK" || { echo "sfdisk failed, skipping"; exit 0; }\nudevadm settle; sleep 3\nCS_PART=$(lsblk -lnpo NAME "$DISK" | tail -1)\nif [ "$CS_PART" = "$DISK" ] || [ ! -b "$CS_PART" ]; then echo "No partition found, skipping"; exit 0; fi\nmkfs.ext4 -q -F "$CS_PART"\nmount "$CS_PART" /var/lib/containers\necho "Container storage ready: $CS_PART"\n' "${DISK}" > "${CS_SETUP}"
+    printf '#!/bin/bash\nset -euo pipefail\nCS_DISK=/dev/vdb\necho "Formatting \$CS_DISK as ext4..."\nmkfs.ext4 -q -F "\$CS_DISK"\nmkdir -p /mnt/containers\nmount "\$CS_DISK" /mnt/containers\nmkdir -p /mnt/containers/storage\ncat > /etc/containers/storage.conf << EOF\n[storage]\ndriver = "vfs"\nrunroot = "/run/containers/storage"\ngraphroot = "/mnt/containers/storage"\nEOF\necho "Container storage ready on \$CS_DISK"\n' > "${CS_SETUP}"
     $SCP "${CS_SETUP}" liveuser@127.0.0.1:/tmp/cs-setup.sh
     $SSH 'sudo bash /tmp/cs-setup.sh'
     echo "Disk-based container storage prepared."
