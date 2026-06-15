@@ -50,15 +50,15 @@ mount-xfs:
 build-bg target:
     #!/usr/bin/bash
     set -euo pipefail
-    mkdir -p {{output_dir}}
-    LOG=$(realpath {{output_dir}})/build.log
+    mkdir -p {{ output_dir }}
+    LOG=$(realpath {{ output_dir }})/build.log
     echo "Starting background build → ${LOG}"
     setsid \
-        debug={{debug}} \
-        installer_channel={{installer_channel}} \
-        output_dir={{output_dir}} \
-        compression={{compression}} \
-        just iso-sd-boot {{target}} \
+        debug={{ debug }} \
+        installer_channel={{ installer_channel }} \
+        output_dir={{ output_dir }} \
+        compression={{ compression }} \
+        just iso-sd-boot {{ target }} \
         > "${LOG}" 2>&1 &
     disown $!
     echo "Build PID $! — tailing log (Ctrl-C is safe, build continues)"
@@ -66,25 +66,25 @@ build-bg target:
 
 # Helper: returns "--bootc-installer-payload-ref <ref>" or "" if no payload_ref file
 _payload_ref_flag target:
-    @if [ -f "{{target}}/payload_ref" ]; then echo "--bootc-installer-payload-ref $(cat '{{target}}/payload_ref' | tr -d '[:space:]')"; fi
+    @if [ -f "{{ target }}/payload_ref" ]; then echo "--bootc-installer-payload-ref $(cat '{{ target }}/payload_ref' | tr -d '[:space:]')"; fi
 
 # Map target to filesystem: bluefin=btrfs, bluefin-lts=xfs. Default=btrfs.
 _filesystem_for target:
-    @if [ "{{target}}" = "bluefin-lts" ]; then echo "xfs"; else echo "btrfs"; fi
+    @if [ "{{ target }}" = "bluefin-lts" ]; then echo "xfs"; else echo "btrfs"; fi
 
 container target:
-    @test -f "{{target}}/payload_ref" || { echo "ERROR: {{target}}/payload_ref not found — create it with the base image reference, e.g.: echo 'ghcr.io/ublue-os/bluefin:stable' > {{target}}/payload_ref"; exit 1; }
+    @test -f "{{ target }}/payload_ref" || { echo "ERROR: {{ target }}/payload_ref not found — create it with the base image reference, e.g.: echo 'ghcr.io/ublue-os/bluefin:stable' > {{ target }}/payload_ref"; exit 1; }
     podman build --cap-add sys_admin --security-opt label=disable \
         --layers \
-        --build-arg DEBUG={{debug}} \
-        --build-arg INSTALLER_CHANNEL={{installer_channel}} \
-        --build-arg BASE_IMAGE=$(cat {{target}}/payload_ref | tr -d '[:space:]') \
-        --build-arg FILESYSTEM=$(just _filesystem_for {{target}}) \
-        -t {{target}}-installer -f ./Containerfile .
+        --build-arg DEBUG={{ debug }} \
+        --build-arg INSTALLER_CHANNEL={{ installer_channel }} \
+        --build-arg BASE_IMAGE=$(cat {{ target }}/payload_ref | tr -d '[:space:]') \
+        --build-arg FILESYSTEM=$(just _filesystem_for {{ target }}) \
+        -t {{ target }}-installer -f ./Containerfile .
 
 # Build the Debian-based ISO assembly container for the given target.
 iso-builder target:
-    podman build --security-opt label=disable -t {{target}}-iso-builder \
+    podman build --security-opt label=disable -t {{ target }}-iso-builder \
         -f ./Containerfile.builder .
 
 # Build a UEFI live ISO for the given target using systemd-boot and dmsquash-live.
@@ -97,11 +97,11 @@ iso-builder target:
 iso-sd-boot target:
     #!/usr/bin/bash
     set -euo pipefail
-    PAYLOAD_IMAGE=$(cat "{{target}}/payload_ref" | tr -d '[:space:]')
+    PAYLOAD_IMAGE=$(cat "{{ target }}/payload_ref" | tr -d '[:space:]')
 
-    mkdir -p {{output_dir}}
-    OUTPUT_DIR=$(realpath "{{output_dir}}")
-    WORKDIR=$(realpath "{{workdir}}")
+    mkdir -p {{ output_dir }}
+    OUTPUT_DIR=$(realpath "{{ output_dir }}")
+    WORKDIR=$(realpath "{{ workdir }}")
 
     echo "=== Disk space before container build ==="
     df -h "${OUTPUT_DIR}"
@@ -109,7 +109,7 @@ iso-sd-boot target:
     if ! findmnt -n -o FSTYPE -T "${WORKDIR}" 2>/dev/null | grep -qE '^(xfs|btrfs)$'; then
         echo "Hint: $WORKDIR is not an XFS/BTRFS mount.  For faster VFS import, run:" >&2
         echo "  sudo just mount-xfs" >&2
-        echo "  sudo just workdir=/mnt iso-sd-boot {{target}}" >&2
+        echo "  sudo just workdir=/mnt iso-sd-boot {{ target }}" >&2
     fi
 
     AVAILABLE_KB=$(df --output=avail -B1024 "${OUTPUT_DIR}" | tail -1 | tr -d ' ')
@@ -119,7 +119,7 @@ iso-sd-boot target:
     fi
     podman images --format "table {{{{.Repository}}}}\t{{{{.Tag}}}}\t{{{{.Size}}}}" 2>/dev/null || true
 
-    just debug={{debug}} installer_channel={{installer_channel}} container {{target}}
+    just debug={{ debug }} installer_channel={{ installer_channel }} container {{ target }}
 
     echo "=== Disk space after container build ==="
     df -h "${OUTPUT_DIR}"
@@ -136,17 +136,17 @@ iso-sd-boot target:
         _ns()    { podman unshare bash -c "$1"; }
     fi
 
-    SQUASHFS="${OUTPUT_DIR}/{{target}}-rootfs.sfs"
-    BOOT_TAR="${OUTPUT_DIR}/{{target}}-boot-files.tar"
-    CS_STAGING="${WORKDIR}/{{target}}-cs-staging"
-    SQUASHFS_ROOT="${WORKDIR}/{{target}}-sfs-root"
-    trap "rm -f '${SQUASHFS}' '${BOOT_TAR}' '${OUTPUT_DIR}/{{target}}-payload.oci.tar' 2>/dev/null || true" EXIT
+    SQUASHFS="${OUTPUT_DIR}/{{ target }}-rootfs.sfs"
+    BOOT_TAR="${OUTPUT_DIR}/{{ target }}-boot-files.tar"
+    CS_STAGING="${WORKDIR}/{{ target }}-cs-staging"
+    SQUASHFS_ROOT="${WORKDIR}/{{ target }}-sfs-root"
+    trap "rm -f '${SQUASHFS}' '${BOOT_TAR}' '${OUTPUT_DIR}/{{ target }}-payload.oci.tar' 2>/dev/null || true" EXIT
     echo "=== Disk space before squashfs assembly ==="
     df -h "${OUTPUT_DIR}"
     if [[ "$WORKDIR" != "$OUTPUT_DIR" ]]; then
         df -h "${WORKDIR}"
     fi
-    echo "Building squashfs and boot tar from localhost/{{target}}-installer..."
+    echo "Building squashfs and boot tar from localhost/{{ target }}-installer..."
     _ns "
         set -euo pipefail
 
@@ -158,16 +158,16 @@ iso-sd-boot target:
         ns_cleanup() {
             umount \"\${SQUASHFS_ROOT}/var/lib/containers/storage\" 2>/dev/null || true
             umount \"\${SQUASHFS_ROOT}\"                            2>/dev/null || true
-            podman image unmount localhost/{{target}}-installer     2>/dev/null || true
+            podman image unmount localhost/{{ target }}-installer     2>/dev/null || true
             rm -rf \"\${OVERLAY_UPPER}\" \"\${OVERLAY_WORK}\"       2>/dev/null || true
             rm -rf \"\${CS_STAGING}\" \"\${SQUASHFS_ROOT}\"         2>/dev/null || true
         }
         trap ns_cleanup EXIT
 
-        MOUNT=\$(podman image mount localhost/{{target}}-installer)
+        MOUNT=\$(podman image mount localhost/{{ target }}-installer)
         PATH=/usr/sbin:/usr/bin:/home/linuxbrew/.linuxbrew/bin:\$PATH
 
-        PAYLOAD_OCI='${OUTPUT_DIR}/{{target}}-payload.oci.tar'
+        PAYLOAD_OCI='${OUTPUT_DIR}/{{ target }}-payload.oci.tar'
         SQUASHFS_STORAGE=\"\${CS_STAGING}/var/lib/containers/storage\"
         STORAGE_CONF=\"\$(mktemp '${OUTPUT_DIR}'/live-storage-XXXXXX.conf)\"
         mkdir -p \"\${SQUASHFS_STORAGE}\"
@@ -192,7 +192,7 @@ iso-sd-boot target:
             -v \"\${PAYLOAD_OCI}:/payload.oci.tar:ro\" \
             -v \"\${SQUASHFS_STORAGE}:/vfs-storage\" \
             -v \"\${STORAGE_CONF}:/tmp/st.conf:ro\" \
-            localhost/{{target}}-installer \
+            localhost/{{ target }}-installer \
             sh -c 'mkdir -p /tmp/cs-runroot /var/tmp && CONTAINERS_STORAGE_CONF=/tmp/st.conf skopeo copy oci-archive:/payload.oci.tar:'"${PAYLOAD_IMAGE}"' containers-storage:'"${PAYLOAD_IMAGE}"''
 
         rm -f \"\${PAYLOAD_OCI}\" \"\${STORAGE_CONF}\"
@@ -230,7 +230,7 @@ iso-sd-boot target:
         du -sh \"\${SQUASHFS_ROOT}\" 2>/dev/null || true
 
         SFS_LEVEL=3; SFS_BLOCK=131072
-        [[ '{{compression}}' == 'release' ]] && { SFS_LEVEL=15; SFS_BLOCK=1048576; }
+        [[ '{{ compression }}' == 'release' ]] && { SFS_LEVEL=15; SFS_BLOCK=1048576; }
         mksquashfs \"\${SQUASHFS_ROOT}\" '${SQUASHFS}' \
             -noappend -comp zstd -Xcompression-level \${SFS_LEVEL} -b \${SFS_BLOCK} \
             -processors 4 \
@@ -248,9 +248,9 @@ iso-sd-boot target:
 
     TMPDIR="${OUTPUT_DIR}" \
     PATH="/usr/sbin:/usr/bin:/home/linuxbrew/.linuxbrew/bin:${PATH}" \
-        bash "src/build-iso.sh" "${BOOT_TAR}" "${SQUASHFS}" "${OUTPUT_DIR}/{{target}}-live.iso"
+        bash "src/build-iso.sh" "${BOOT_TAR}" "${SQUASHFS}" "${OUTPUT_DIR}/{{ target }}-live.iso"
 
-    echo "ISO ready: ${OUTPUT_DIR}/{{target}}-live.iso"
+    echo "ISO ready: ${OUTPUT_DIR}/{{ target }}-live.iso"
 
 # ── QEMU and libvirt boot / LUKS testing recipes ─────────────────────────────
 
@@ -263,12 +263,12 @@ boot-iso-serial target:
                /home/linuxbrew/.linuxbrew/bin/qemu-system-x86_64 2>/dev/null | head -1)
     [[ -z "$QEMU" ]] && { echo "qemu-kvm / qemu-system-x86_64 not found" >&2; exit 1; }
     ISO=$(ls \
-        {{output_dir}}/{{target}}-live.iso \
+        {{ output_dir }}/{{ target }}-live.iso \
         output/bootiso/install.iso \
-        output/bootc-{{target}}*.iso \
+        output/bootc-{{ target }}*.iso \
         2>/dev/null | head -1 || true)
     if [[ -z "$ISO" ]]; then
-        echo "No ISO found for '{{target}}' — run: just iso-sd-boot {{target}}" >&2
+        echo "No ISO found for '{{ target }}' — run: just iso-sd-boot {{ target }}" >&2
         exit 1
     fi
 
@@ -327,12 +327,12 @@ boot-libvirt-debug target:
     DISK_SIZE=64
 
     ISO=$(ls \
-        {{output_dir}}/{{target}}-live.iso \
+        {{ output_dir }}/{{ target }}-live.iso \
         output/bootiso/install.iso \
-        output/bootc-{{target}}*.iso \
+        output/bootc-{{ target }}*.iso \
         2>/dev/null | head -1 || true)
     if [[ -z "$ISO" ]]; then
-        echo "No ISO found for '{{target}}' — run: just debug=1 iso-sd-boot {{target}}" >&2
+        echo "No ISO found for '{{ target }}' — run: just debug=1 iso-sd-boot {{ target }}" >&2
         exit 1
     fi
 
@@ -425,9 +425,9 @@ luks-install target:
     set -euo pipefail
 
     VM_NAME="bluefin-debug"
-    PASSPHRASE="{{luks-passphrase}}"
+    PASSPHRASE="{{ luks-passphrase }}"
     DISK="/dev/sda"
-    PAYLOAD_IMAGE=$(cat "{{target}}/payload_ref" | tr -d '[:space:]')
+    PAYLOAD_IMAGE=$(cat "{{ target }}/payload_ref" | tr -d '[:space:]')
     SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -o IdentitiesOnly=yes -o PreferredAuthentications=password"
     SSH="sshpass -p live ssh $SSH_OPTS"
     SCP="sshpass -p live scp $SSH_OPTS"
@@ -435,7 +435,7 @@ luks-install target:
     MAC=$(sudo virsh domiflist "$VM_NAME" 2>/dev/null | awk '/network/{print $5; exit}')
     if [[ -z "$MAC" ]]; then
         echo "ERROR: VM '${VM_NAME}' is not running."
-        echo "Start it first: just debug=1 boot-libvirt-debug {{target}}"
+        echo "Start it first: just debug=1 boot-libvirt-debug {{ target }}"
         exit 1
     fi
 
@@ -488,18 +488,18 @@ luks-install target:
     echo ""
     echo "========================================"
     echo " VM is rebooting into the installed system."
-    echo " Unlock LUKS: just luks-unlock {{target}}"
-    echo " Watch boot:  just luks-boot {{target}}"
+    echo " Unlock LUKS: just luks-unlock {{ target }}"
+    echo " Watch boot:  just luks-boot {{ target }}"
     echo "========================================"
 
 # Automate LUKS passphrase entry on the bluefin-debug VM serial console.
 luks-unlock target:
     #!/usr/bin/bash
     VM_NAME="bluefin-debug"
-    PASSPHRASE="{{luks-passphrase}}"
+    PASSPHRASE="{{ luks-passphrase }}"
     if ! sudo virsh domstate "$VM_NAME" 2>/dev/null | grep -q running; then
         echo "ERROR: VM '${VM_NAME}' is not running."
-        echo "Run: just luks-install {{target}}"
+        echo "Run: just luks-install {{ target }}"
         exit 1
     fi
     MAC=$(sudo virsh domiflist "$VM_NAME" 2>/dev/null | awk '/network/{print $5; exit}')
@@ -517,11 +517,11 @@ luks-boot target:
     VM_NAME="bluefin-debug"
     if ! sudo virsh domstate "$VM_NAME" 2>/dev/null | grep -q running; then
         echo "ERROR: VM '${VM_NAME}' is not running."
-        echo "Run: just luks-install {{target}}"
+        echo "Run: just luks-install {{ target }}"
         exit 1
     fi
     echo "Connecting to serial console (detach: Ctrl-])"
-    echo "At the LUKS passphrase prompt type: {{luks-passphrase}}"
+    echo "At the LUKS passphrase prompt type: {{ luks-passphrase }}"
     echo ""
     sudo virsh console "$VM_NAME"
 
@@ -538,23 +538,23 @@ luks-qemu-ssh-port := "2222"
 e2e target:
     #!/usr/bin/bash
     set -euo pipefail
-    echo "=== Step 1/2: Building ISO (debug={{debug}}, installer_channel={{installer_channel}}) ==="
-    just debug={{debug}} installer_channel={{installer_channel}} output_dir={{output_dir}} iso-sd-boot {{target}}
+    echo "=== Step 1/2: Building ISO (debug={{ debug }}, installer_channel={{ installer_channel }}) ==="
+    just debug={{ debug }} installer_channel={{ installer_channel }} output_dir={{ output_dir }} iso-sd-boot {{ target }}
     echo "=== Step 2/2: LUKS end-to-end test ==="
-    sudo rm -f "{{luks-qemu-disk}}" "{{luks-qemu-monitor-live}}" "{{luks-qemu-monitor-installed}}" \
-               "{{luks-qemu-serial-live}}" "{{luks-qemu-serial-installed}}"
-    just luks-test-qemu {{target}}
+    sudo rm -f "{{ luks-qemu-disk }}" "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-monitor-installed }}" \
+               "{{ luks-qemu-serial-live }}" "{{ luks-qemu-serial-installed }}"
+    just luks-test-qemu {{ target }}
 
 # Run the full LUKS end-to-end test in QEMU (CI entry point).
 luks-test-qemu target:
     #!/usr/bin/bash
     set -euo pipefail
-    just luks-qemu-disk={{luks-qemu-disk}} luks-boot-qemu-live {{target}}
-    just luks-qemu-ssh-port={{luks-qemu-ssh-port}} luks-install-qemu {{target}}
-    just luks-qemu-disk={{luks-qemu-disk}} luks-boot-qemu-installed {{target}}
-    just luks-qemu-monitor-installed={{luks-qemu-monitor-installed}} \
-         luks-qemu-serial-installed={{luks-qemu-serial-installed}} \
-         luks-unlock-qemu {{target}}
+    just luks-qemu-disk={{ luks-qemu-disk }} luks-boot-qemu-live {{ target }}
+    just luks-qemu-ssh-port={{ luks-qemu-ssh-port }} luks-install-qemu {{ target }}
+    just luks-qemu-disk={{ luks-qemu-disk }} luks-boot-qemu-installed {{ target }}
+    just luks-qemu-monitor-installed={{ luks-qemu-monitor-installed }} \
+         luks-qemu-serial-installed={{ luks-qemu-serial-installed }} \
+         luks-unlock-qemu {{ target }}
 
 # Boot the live ISO in QEMU (daemonized) with a blank install disk attached.
 luks-boot-qemu-live target:
@@ -565,12 +565,12 @@ luks-boot-qemu-live target:
                /home/linuxbrew/.linuxbrew/bin/qemu-system-x86_64 2>/dev/null | head -1)
     [[ -z "$QEMU" ]] && { echo "qemu-kvm / qemu-system-x86_64 not found" >&2; exit 1; }
     ISO=$(ls \
-        {{output_dir}}/{{target}}-live.iso \
+        {{ output_dir }}/{{ target }}-live.iso \
         output/bootiso/install.iso \
-        output/bootc-{{target}}*.iso \
+        output/bootc-{{ target }}*.iso \
         2>/dev/null | head -1 || true)
     if [[ -z "$ISO" ]]; then
-        echo "No ISO found — run: just debug=1 iso-sd-boot {{target}}" >&2
+        echo "No ISO found — run: just debug=1 iso-sd-boot {{ target }}" >&2
         exit 1
     fi
 
@@ -586,8 +586,8 @@ luks-boot-qemu-live target:
     done
     [[ -z "$OVMF_CODE" ]] && { echo "OVMF firmware not found" >&2; exit 1; }
 
-    [[ -f "{{luks-qemu-disk}}" ]] || qemu-img create -f qcow2 "{{luks-qemu-disk}}" 64G
-    sudo rm -f "{{luks-qemu-monitor-live}}" "{{luks-qemu-serial-live}}"
+    [[ -f "{{ luks-qemu-disk }}" ]] || qemu-img create -f qcow2 "{{ luks-qemu-disk }}" 64G
+    sudo rm -f "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-serial-live }}"
 
     echo "Booting live ISO: $ISO"
     QEMU_ACCEL="-accel kvm"
@@ -609,45 +609,45 @@ luks-boot-qemu-live target:
         -drive "if=none,id=iso,file=${ISO},media=cdrom,readonly=on,format=raw" \
         -device virtio-scsi-pci,id=scsi \
         -device scsi-cd,drive=iso \
-        -drive "if=none,id=disk,file={{luks-qemu-disk}},format=qcow2" \
+        -drive "if=none,id=disk,file={{ luks-qemu-disk }},format=qcow2" \
         -device virtio-blk-pci,drive=disk \
-        -netdev "user,id=net0,hostfwd=tcp::{{luks-qemu-ssh-port}}-:22" \
+        -netdev "user,id=net0,hostfwd=tcp::{{ luks-qemu-ssh-port }}-:22" \
         -device virtio-net-pci,netdev=net0 \
-        -monitor "unix:{{luks-qemu-monitor-live}},server,nowait" \
-        -serial "file:{{luks-qemu-serial-live}}" \
+        -monitor "unix:{{ luks-qemu-monitor-live }},server,nowait" \
+        -serial "file:{{ luks-qemu-serial-live }}" \
         -display none \
         -daemonize
-    echo "Live QEMU started (monitor: {{luks-qemu-monitor-live}})"
+    echo "Live QEMU started (monitor: {{ luks-qemu-monitor-live }})"
 
     SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -o PreferredAuthentications=password"
-    echo "Waiting for live environment on port {{luks-qemu-ssh-port}}..."
+    echo "Waiting for live environment on port {{ luks-qemu-ssh-port }}..."
     for i in $(seq 1 60); do
-        if sudo grep -q "BLUEFIN_LIVE_READY" "{{luks-qemu-serial-live}}" 2>/dev/null; then
+        if sudo grep -q "BLUEFIN_LIVE_READY" "{{ luks-qemu-serial-live }}" 2>/dev/null; then
             echo "Live environment ready (serial marker seen)"
             break
         fi
-        if sshpass -p live ssh $SSH_OPTS liveuser@127.0.0.1 -p {{luks-qemu-ssh-port}} true 2>/dev/null; then
+        if sshpass -p live ssh $SSH_OPTS liveuser@127.0.0.1 -p {{ luks-qemu-ssh-port }} true 2>/dev/null; then
             echo "Live environment ready (SSH connected)"
             break
         fi
-        [[ "$i" -eq 60 ]] && { echo "ERROR: live env not ready after 5m"; sudo tail -30 "{{luks-qemu-serial-live}}" || true; exit 1; }
+        [[ "$i" -eq 60 ]] && { echo "ERROR: live env not ready after 5m"; sudo tail -30 "{{ luks-qemu-serial-live }}" || true; exit 1; }
         sleep 5
     done
 
     sleep 2
-    sudo socat - "UNIX-CONNECT:{{luks-qemu-monitor-live}}" \
+    sudo socat - "UNIX-CONNECT:{{ luks-qemu-monitor-live }}" \
         <<< "screendump /tmp/luks-screenshot-live.ppm" 2>/dev/null || true
 
 # Run fisherman LUKS install via SSH into the live QEMU VM.
 luks-install-qemu target:
     #!/usr/bin/bash
     set -euo pipefail
-    PASSPHRASE="{{luks-passphrase}}"
+    PASSPHRASE="{{ luks-passphrase }}"
     DISK="/dev/vda"
-    PAYLOAD_IMAGE=$(cat "{{target}}/payload_ref" | tr -d '[:space:]')
+    PAYLOAD_IMAGE=$(cat "{{ target }}/payload_ref" | tr -d '[:space:]')
     SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -o PreferredAuthentications=password -o ServerAliveInterval=30 -o ServerAliveCountMax=20"
-    SSH="sshpass -p live ssh $SSH_OPTS liveuser@127.0.0.1 -p {{luks-qemu-ssh-port}}"
-    SCP="sshpass -p live scp $SSH_OPTS -P {{luks-qemu-ssh-port}}"
+    SSH="sshpass -p live ssh $SSH_OPTS liveuser@127.0.0.1 -p {{ luks-qemu-ssh-port }}"
+    SCP="sshpass -p live scp $SSH_OPTS -P {{ luks-qemu-ssh-port }}"
 
     RECIPE_TMP=$(mktemp /tmp/luks-recipe-XXXXXX.json)
     trap "rm -f '${RECIPE_TMP}'" EXIT
@@ -660,23 +660,7 @@ luks-install-qemu target:
     echo "Preparing disk-based container storage on target disk..."
     CS_SETUP=$(mktemp /tmp/cs-setup-XXXXXX.sh)
     trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}'" EXIT
-    cat > "${CS_SETUP}" << 'CSEOF'
-#!/bin/bash
-set -euo pipefail
-DISK=@@DISK@@
-LAST_SEC=$(blockdev --getsz "$DISK")
-CS_START=$((LAST_SEC - 41943040))
-if [ $CS_START -lt 1 ]; then echo "Disk too small, skipping"; exit 0; fi
-echo "Creating 20GB partition at sector $CS_START on $DISK..."
-echo "start=$CS_START, type=linux" | sfdisk --no-reread -q "$DISK" || { echo "sfdisk failed, skipping"; exit 0; }
-udevadm settle; sleep 3
-CS_PART=$(lsblk -lnpo NAME "$DISK" | tail -1)
-if [ "$CS_PART" = "$DISK" ] || [ ! -b "$CS_PART" ]; then echo "No partition found, skipping"; exit 0; fi
-mkfs.ext4 -q -F "$CS_PART"
-mount "$CS_PART" /var/lib/containers
-echo "Container storage ready: $CS_PART"
-CSEOF
-    sed -i "s|@@DISK@@|${DISK}|" "${CS_SETUP}"
+    printf '#!/bin/bash\nset -euo pipefail\nDISK=%s\nLAST_SEC=$(blockdev --getsz "$DISK")\nCS_START=$((LAST_SEC - 41943040))\nif [ $CS_START -lt 1 ]; then echo "Disk too small, skipping"; exit 0; fi\necho "Creating 20GB partition at sector $CS_START on $DISK..."\necho "start=$CS_START, type=linux" | sfdisk --no-reread -q "$DISK" || { echo "sfdisk failed, skipping"; exit 0; }\nudevadm settle; sleep 3\nCS_PART=$(lsblk -lnpo NAME "$DISK" | tail -1)\nif [ "$CS_PART" = "$DISK" ] || [ ! -b "$CS_PART" ]; then echo "No partition found, skipping"; exit 0; fi\nmkfs.ext4 -q -F "$CS_PART"\nmount "$CS_PART" /var/lib/containers\necho "Container storage ready: $CS_PART"\n' "${DISK}" > "${CS_SETUP}"
     $SCP "${CS_SETUP}" liveuser@127.0.0.1:/tmp/cs-setup.sh
     $SSH 'sudo bash /tmp/cs-setup.sh'
     echo "Disk-based container storage prepared."
@@ -684,9 +668,9 @@ CSEOF
     echo "Running fisherman (pulls from registry, takes several minutes)..."
     $SSH 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
     echo "Install complete. Shutting down live QEMU..."
-    echo "system_powerdown" | sudo socat - "UNIX-CONNECT:{{luks-qemu-monitor-live}}" 2>/dev/null || true
+    echo "system_powerdown" | sudo socat - "UNIX-CONNECT:{{ luks-qemu-monitor-live }}" 2>/dev/null || true
     sleep 5
-    echo "quit" | sudo socat - "UNIX-CONNECT:{{luks-qemu-monitor-live}}" 2>/dev/null || true
+    echo "quit" | sudo socat - "UNIX-CONNECT:{{ luks-qemu-monitor-live }}" 2>/dev/null || true
 
 # Boot the installed disk in QEMU (no ISO). Called after luks-install-qemu.
 luks-boot-qemu-installed target:
@@ -708,9 +692,9 @@ luks-boot-qemu-installed target:
     done
     [[ -z "$OVMF_CODE" ]] && { echo "OVMF firmware not found" >&2; exit 1; }
 
-    sudo rm -f "{{luks-qemu-monitor-installed}}" "{{luks-qemu-serial-installed}}"
+    sudo rm -f "{{ luks-qemu-monitor-installed }}" "{{ luks-qemu-serial-installed }}"
 
-    echo "Booting installed disk: {{luks-qemu-disk}}"
+    echo "Booting installed disk: {{ luks-qemu-disk }}"
     QEMU_ACCEL="-accel kvm"
     QEMU_PREFIX=""
     if ! test -r /dev/kvm 2>/dev/null; then
@@ -727,18 +711,18 @@ luks-boot-qemu-installed target:
         -machine q35 -cpu host -m 8192 -smp 4 $QEMU_ACCEL \
         -drive "if=pflash,format=raw,readonly=on,file=${OVMF_CODE}" \
         -drive "if=pflash,format=raw,file=${OVMF_VARS}" \
-        -drive "if=none,id=disk,file={{luks-qemu-disk}},format=qcow2" \
+        -drive "if=none,id=disk,file={{ luks-qemu-disk }},format=qcow2" \
         -device virtio-blk-pci,drive=disk \
         -netdev user,id=net0 \
         -device virtio-net-pci,netdev=net0 \
-        -monitor "unix:{{luks-qemu-monitor-installed}},server,nowait" \
-        -serial "file:{{luks-qemu-serial-installed}}" \
+        -monitor "unix:{{ luks-qemu-monitor-installed }},server,nowait" \
+        -serial "file:{{ luks-qemu-serial-installed }}" \
         -display none \
         -daemonize
-    echo "Installed QEMU started (monitor: {{luks-qemu-monitor-installed}})"
+    echo "Installed QEMU started (monitor: {{ luks-qemu-monitor-installed }})"
 
     for i in $(seq 1 15); do
-        [[ -S "{{luks-qemu-monitor-installed}}" ]] && break
+        [[ -S "{{ luks-qemu-monitor-installed }}" ]] && break
         sleep 2
     done
 
@@ -746,13 +730,13 @@ luks-boot-qemu-installed target:
 luks-unlock-qemu target:
     #!/usr/bin/bash
     set -euo pipefail
-    PASSPHRASE="{{luks-passphrase}}"
+    PASSPHRASE="{{ luks-passphrase }}"
     echo "Unlocking LUKS on installed QEMU VM..."
     echo "Passphrase: ${PASSPHRASE}"
     sudo python3 "src/luks-unlock.py" qemu \
-        "{{luks-qemu-monitor-installed}}" \
+        "{{ luks-qemu-monitor-installed }}" \
         "$PASSPHRASE" \
-        "{{luks-qemu-serial-installed}}"
+        "{{ luks-qemu-serial-installed }}"
 
     for label in "Plymouth prompt" "Final boot"; do
         key=$(echo "$label" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
