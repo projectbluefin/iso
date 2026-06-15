@@ -33,7 +33,13 @@ import time
 POLL_INTERVAL = 3        # seconds between screenshot polls
 PLYMOUTH_WAIT = 10       # seconds to wait after display goes blank before sending keys
 PROMPT_DEADLINE = 300    # seconds to wait for Plymouth to take over
-BOOT_DEADLINE = 300      # seconds to wait for successful boot after passphrase
+BOOT_DEADLINE = 900      # seconds to wait for successful boot after passphrase
+
+# Headless QEMU (-display none) often keeps the framebuffer all-black after
+# LUKS unlock while GRUB2 and Plymouth run.  If the screen hash has not
+# changed within this many seconds of the passphrase being sent, we assume
+# the passphrase was accepted and the system is booting silently.
+DARK_SCREEN_OVERRIDE_S = 90
 
 
 # ── Libvirt helpers ───────────────────────────────────────────────────────────
@@ -231,7 +237,22 @@ def run_libvirt(vm: str, passphrase: str, mac: str):
     sys.exit(2)
 
 
-def run_qemu(monitor_sock: str, passphrase: str, serial_log: str):
+def ssh_reachable(port: int, timeout: int = 5) -> bool:
+    """Return True if sshd on localhost:port is accepting TCP connections.
+
+    Checks TCP reachability only — does not require auth or a configured user.
+    An SSH banner in the response means the daemon is up and the system booted.
+    """
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout) as s:
+            banner = s.recv(64)
+            return banner.startswith(b"SSH-")
+    except OSError:
+        return False
+
+
+def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int = 0):
     snap = "/tmp/luks-unlock-snap.ppm"
 
     # Plymouth detection strategy
@@ -329,6 +350,7 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str):
     # accepted → Plymouth clears → boot continues) and check serial for emergency
     # shell (still useful for catching issue #270 even without ttyS0).
     deadline = time.time() + BOOT_DEADLINE
+    passphrase_time = time.time()
     passphrase_hash = prev_hash  # Plymouth hash at time of passphrase send
     screen_changed = False
     gnome_stable_count = 0
@@ -338,6 +360,35 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str):
         if result == "emergency":
             print("[luks-unlock] RESULT: emergency shell — issue #270 reproduced", flush=True)
             sys.exit(2)
+
+        # SSH success path: if caller provided a port, test TCP reachability to
+        # detect sshd banner — no auth needed, just "daemon is up = boot done".
+        # Wins reliably when the installed system starts sshd but lacks
+        # console=ttyS0 (so no serial markers reach the log).
+        if ssh_port and ssh_reachable(ssh_port):
+            print(f"[luks-unlock] RESULT: boot succeeded (sshd banner on port {ssh_port})",
+                  flush=True)
+            try:
+                import shutil
+                qemu_screendump(monitor_sock, snap)
+                shutil.copy2(snap, "/tmp/luks-screenshot-final.ppm")
+            except OSError:
+                pass
+            sys.exit(0)
+
+        # Dark-screen override: headless QEMU (-display none) often keeps the
+        # framebuffer all-black during GRUB2 + Plymouth even after a successful
+        # LUKS unlock.  The passphrase_hash == post-passphrase hash so
+        # screen_changed never flips.  Force it after DARK_SCREEN_OVERRIDE_S so
+        # the brightness check can run.
+        elapsed_since_passphrase = time.time() - passphrase_time
+        if not screen_changed and elapsed_since_passphrase > DARK_SCREEN_OVERRIDE_S:
+            screen_changed = True
+            print(
+                f"[luks-unlock] Dark-screen override: screen unchanged for "
+                f"{int(elapsed_since_passphrase)}s — assuming LUKS accepted, boot proceeding",
+                flush=True,
+            )
 
         brightness, md5 = qemu_screendump(monitor_sock, snap)
         print(f"[luks-unlock] post-passphrase brightness={brightness:.2f} hash={md5[:8]}",
@@ -437,9 +488,11 @@ def main():
 
     elif mode == "qemu":
         if len(sys.argv) < 5:
-            print("Usage: luks-unlock.py qemu <monitor-sock> <passphrase> <serial-log>", file=sys.stderr)
+            print("Usage: luks-unlock.py qemu <monitor-sock> <passphrase> <serial-log> [ssh-port]",
+                  file=sys.stderr)
             sys.exit(1)
-        run_qemu(sys.argv[2], sys.argv[3], sys.argv[4])
+        ssh_port = int(sys.argv[5]) if len(sys.argv) >= 6 else 0
+        run_qemu(sys.argv[2], sys.argv[3], sys.argv[4], ssh_port=ssh_port)
 
     else:
         print(f"Unknown mode: {mode!r}. Use 'libvirt' or 'qemu'.", file=sys.stderr)

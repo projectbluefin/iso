@@ -534,6 +534,8 @@ luks-qemu-monitor-installed := "/tmp/bluefin-qemu-installed.sock"
 luks-qemu-serial-live := "/tmp/bluefin-qemu-live-serial.log"
 luks-qemu-serial-installed := "/tmp/bluefin-qemu-installed-serial.log"
 luks-qemu-ssh-port := "2222"
+# SSH port forwarded into the installed (post-LUKS-unlock) VM for boot detection.
+luks-qemu-ssh-port-installed := "2223"
 
 # Full end-to-end test: build the ISO then run the LUKS install + boot test.
 e2e target:
@@ -552,9 +554,12 @@ luks-test-qemu target:
     set -euo pipefail
     just luks-qemu-disk={{ luks-qemu-disk }} luks-boot-qemu-live {{ target }}
     just luks-qemu-ssh-port={{ luks-qemu-ssh-port }} luks-install-qemu {{ target }}
-    just luks-qemu-disk={{ luks-qemu-disk }} luks-boot-qemu-installed {{ target }}
+    just luks-qemu-disk={{ luks-qemu-disk }} \
+         luks-qemu-ssh-port-installed={{ luks-qemu-ssh-port-installed }} \
+         luks-boot-qemu-installed {{ target }}
     just luks-qemu-monitor-installed={{ luks-qemu-monitor-installed }} \
          luks-qemu-serial-installed={{ luks-qemu-serial-installed }} \
+         luks-qemu-ssh-port-installed={{ luks-qemu-ssh-port-installed }} \
          luks-unlock-qemu {{ target }}
 
 # Boot the live ISO in QEMU (daemonized) with a blank install disk attached.
@@ -718,7 +723,7 @@ luks-boot-qemu-installed target:
         -drive "if=pflash,format=raw,file=${OVMF_VARS}" \
         -drive "if=none,id=disk,file={{ luks-qemu-disk }},format=qcow2" \
         -device virtio-blk-pci,drive=disk \
-        -netdev user,id=net0 \
+        -netdev "user,id=net0,hostfwd=tcp::{{ luks-qemu-ssh-port-installed }}-:22" \
         -device virtio-net-pci,netdev=net0 \
         -monitor "unix:{{ luks-qemu-monitor-installed }},server,nowait" \
         -serial "file:{{ luks-qemu-serial-installed }}" \
@@ -732,6 +737,8 @@ luks-boot-qemu-installed target:
     done
 
 # Send LUKS passphrase to installed QEMU VM via monitor screendump + sendkey.
+# luks-qemu-ssh-port-installed: forwarded SSH port for boot-completion detection
+#   (0 = disabled, use framebuffer fallback only)
 luks-unlock-qemu target:
     #!/usr/bin/bash
     set -euo pipefail
@@ -741,7 +748,8 @@ luks-unlock-qemu target:
     sudo python3 "src/luks-unlock.py" qemu \
         "{{ luks-qemu-monitor-installed }}" \
         "$PASSPHRASE" \
-        "{{ luks-qemu-serial-installed }}"
+        "{{ luks-qemu-serial-installed }}" \
+        "{{ luks-qemu-ssh-port-installed }}"
 
     for label in "Plymouth prompt" "Final boot"; do
         key=$(echo "$label" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
