@@ -288,6 +288,7 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
         if serial_result == "plymouth":
             print("[luks-unlock] Plymouth passphrase prompt detected via serial", flush=True)
             brightness, md5 = qemu_screendump(monitor_sock, snap)
+            prev_hash = md5  # anchor passphrase_hash so post-passphrase screen_changed is accurate
             try:
                 import shutil
                 shutil.copy2(snap, "/tmp/luks-screenshot-plymouth.ppm")
@@ -379,16 +380,22 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
         # Dark-screen override: headless QEMU (-display none) often keeps the
         # framebuffer all-black during GRUB2 + Plymouth even after a successful
         # LUKS unlock.  The passphrase_hash == post-passphrase hash so
-        # screen_changed never flips.  Force it after DARK_SCREEN_OVERRIDE_S so
-        # the brightness check can run.
+        # screen_changed never flips and the brightness check never runs.
+        #
+        # When the screen stays dark for DARK_SCREEN_OVERRIDE_S seconds:
+        #   - With SSH port: do nothing. We just keep looping and polling SSH.
+        #   - Without SSH port: exit 0 now.  If the passphrase was wrong Plymouth
+        #     would have re-prompted; silence = passphrase accepted = boot proceeding.
         elapsed_since_passphrase = time.time() - passphrase_time
         if not screen_changed and elapsed_since_passphrase > DARK_SCREEN_OVERRIDE_S:
-            screen_changed = True
-            print(
-                f"[luks-unlock] Dark-screen override: screen unchanged for "
-                f"{int(elapsed_since_passphrase)}s — assuming LUKS accepted, boot proceeding",
-                flush=True,
-            )
+            if not ssh_port:
+                print(
+                    f"[luks-unlock] Dark-screen override: screen unchanged for "
+                    f"{int(elapsed_since_passphrase)}s and no SSH port configured — assuming boot succeeded",
+                    flush=True,
+                )
+                sys.exit(0)
+
 
         brightness, md5 = qemu_screendump(monitor_sock, snap)
         print(f"[luks-unlock] post-passphrase brightness={brightness:.2f} hash={md5[:8]}",
