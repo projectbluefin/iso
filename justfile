@@ -603,7 +603,7 @@ luks-boot-qemu-live target:
         fi
     fi
     $QEMU_PREFIX "$QEMU" \
-        -machine q35 -cpu host -m 14336 -smp 4 $QEMU_ACCEL \
+        -machine q35 -cpu host -m 8192 -smp 4 $QEMU_ACCEL \
         -drive "if=pflash,format=raw,readonly=on,file=${OVMF_CODE}" \
         -drive "if=pflash,format=raw,file=${OVMF_VARS}" \
         -drive "if=none,id=iso,file=${ISO},media=cdrom,readonly=on,format=raw" \
@@ -655,30 +655,33 @@ luks-install-qemu target:
         "${DISK}" "${PAYLOAD_IMAGE}" "${PASSPHRASE}" > "${RECIPE_TMP}"
     $SCP "${RECIPE_TMP}" liveuser@127.0.0.1:/tmp/luks-recipe.json
 
-    # ostree images need substantial container storage for podman pull (74 layers, ~5GB).
-    # The live overlay upper is RAM-backed — not enough space.  Carve a 20GB partition
-    # from the end of the target disk and mount it at /var/lib/containers.
+    # ostree images need substantial container storage for podman pull.
+    # Carve a 20GB partition from the end of the target disk for /var/lib/containers.
     echo "Preparing disk-based container storage on target disk..."
-    $SSH 'sudo bash -c "
-        set -euo pipefail
-        DISK='"${DISK}"'
-        # Find last usable sector, subtract 20GB (20*1024*1024*1024/512 = 41943040 sectors)
-        LAST_SEC=\\$(blockdev --getsz \"\$DISK\")
-        CS_START=\\$((LAST_SEC - 41943040))
-        echo \"Creating 20GB container-storage partition at sector \\${CS_START}...\"
-        echo \",\\${CS_START}M,,L\" | sfdisk --no-reread -q \"\$DISK\" || { echo \"sfdisk failed, skipping container storage prep\"; exit 0; }
-        udevadm settle; sleep 2
-        # New partition is the last one
-        CS_PART=\\$(lsblk -lnpo NAME \"\$DISK\" | tail -1)
-        [[ "\$CS_PART" != "\$DISK\" ]] || { echo \"No new partition found\"; exit 0; }
-        echo \"Formatting \$CS_PART as ext4...\"
-        mkfs.ext4 -q -F \"\$CS_PART\"
-        mount \"\$CS_PART\" /var/lib/containers
-        echo \"Container storage ready: \$CS_PART at /var/lib/containers\"
-    "'
+    CS_SETUP=$(mktemp /tmp/cs-setup-XXXXXX.sh)
+    trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}'" EXIT
+    cat > "${CS_SETUP}" << 'CSEOF'
+#!/bin/bash
+set -euo pipefail
+DISK=@@DISK@@
+LAST_SEC=$(blockdev --getsz "$DISK")
+CS_START=$((LAST_SEC - 41943040))
+if [ $CS_START -lt 1 ]; then echo "Disk too small, skipping"; exit 0; fi
+echo "Creating 20GB partition at sector $CS_START on $DISK..."
+echo "start=$CS_START, type=linux" | sfdisk --no-reread -q "$DISK" || { echo "sfdisk failed, skipping"; exit 0; }
+udevadm settle; sleep 3
+CS_PART=$(lsblk -lnpo NAME "$DISK" | tail -1)
+if [ "$CS_PART" = "$DISK" ] || [ ! -b "$CS_PART" ]; then echo "No partition found, skipping"; exit 0; fi
+mkfs.ext4 -q -F "$CS_PART"
+mount "$CS_PART" /var/lib/containers
+echo "Container storage ready: $CS_PART"
+CSEOF
+    sed -i "s|@@DISK@@|${DISK}|" "${CS_SETUP}"
+    $SCP "${CS_SETUP}" liveuser@127.0.0.1:/tmp/cs-setup.sh
+    $SSH 'sudo bash /tmp/cs-setup.sh'
     echo "Disk-based container storage prepared."
 
-    echo "Uploaded recipe — running fisherman (pulls from registry, takes several minutes)..."
+    echo "Running fisherman (pulls from registry, takes several minutes)..."
     $SSH 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
     echo "Install complete. Shutting down live QEMU..."
     echo "system_powerdown" | sudo socat - "UNIX-CONNECT:{{luks-qemu-monitor-live}}" 2>/dev/null || true
@@ -721,7 +724,7 @@ luks-boot-qemu-installed target:
         fi
     fi
     $QEMU_PREFIX "$QEMU" \
-        -machine q35 -cpu host -m 14336 -smp 4 $QEMU_ACCEL \
+        -machine q35 -cpu host -m 8192 -smp 4 $QEMU_ACCEL \
         -drive "if=pflash,format=raw,readonly=on,file=${OVMF_CODE}" \
         -drive "if=pflash,format=raw,file=${OVMF_VARS}" \
         -drive "if=none,id=disk,file={{luks-qemu-disk}},format=qcow2" \
