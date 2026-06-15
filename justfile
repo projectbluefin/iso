@@ -280,6 +280,7 @@ boot-iso-serial target:
         /usr/share/edk2/ovmf/OVMF_CODE.fd \
         /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
         /usr/share/ovmf/OVMF.fd \
+        /home/linuxbrew/.linuxbrew/share/qemu/edk2-x86_64-code.fd \
         /home/linuxbrew/.linuxbrew/Cellar/qemu/11.0.0/share/qemu/edk2-x86_64-code.fd; do
         [[ -f "$f" ]] && { OVMF_CODE="$f"; break; }
     done
@@ -287,7 +288,8 @@ boot-iso-serial target:
     for f in \
         /usr/share/OVMF/OVMF_VARS.fd \
         /usr/share/edk2/ovmf/OVMF_VARS.fd \
-        /usr/share/edk2-ovmf/x64/OVMF_VARS.fd; do
+        /usr/share/edk2-ovmf/x64/OVMF_VARS.fd \
+        /home/linuxbrew/.linuxbrew/share/qemu/edk2-i386-vars.fd; do
         [[ -f "$f" ]] && { OVMF_VARS_SRC="$f"; break; }
     done
     if [[ -z "$OVMF_CODE" ]]; then
@@ -344,6 +346,7 @@ boot-libvirt-debug target:
         /usr/share/edk2/ovmf/OVMF_CODE.fd \
         /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
         /usr/share/ovmf/OVMF.fd \
+        /home/linuxbrew/.linuxbrew/share/qemu/edk2-x86_64-code.fd \
         /home/linuxbrew/.linuxbrew/Cellar/qemu/11.0.0/share/qemu/edk2-x86_64-code.fd; do
         [[ -f "$f" ]] && { OVMF_CODE="$f"; break; }
     done
@@ -351,7 +354,8 @@ boot-libvirt-debug target:
     for f in \
         /usr/share/OVMF/OVMF_VARS.fd \
         /usr/share/edk2/ovmf/OVMF_VARS.fd \
-        /usr/share/edk2-ovmf/x64/OVMF_VARS.fd; do
+        /usr/share/edk2-ovmf/x64/OVMF_VARS.fd \
+        /home/linuxbrew/.linuxbrew/share/qemu/edk2-i386-vars.fd; do
         [[ -f "$f" ]] && { OVMF_VARS="$f"; break; }
     done
     if [[ -z "$OVMF_CODE" ]]; then
@@ -585,11 +589,13 @@ luks-boot-qemu-live target:
     OVMF_CODE=""; OVMF_VARS=""
     for f in /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd \
               /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/ovmf/OVMF.fd \
+              /home/linuxbrew/.linuxbrew/share/qemu/edk2-x86_64-code.fd \
               /home/linuxbrew/.linuxbrew/Cellar/qemu/11.0.0/share/qemu/edk2-x86_64-code.fd; do
         [[ -f "$f" ]] && { OVMF_CODE="$f"; break; }
     done
     for f in /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd \
-              /usr/share/edk2/ovmf/OVMF_VARS.fd; do
+              /usr/share/edk2/ovmf/OVMF_VARS.fd \
+              /home/linuxbrew/.linuxbrew/share/qemu/edk2-i386-vars.fd; do
         if [[ -f "$f" ]]; then cp "$f" /var/tmp/bluefin-qemu-live-vars.fd; OVMF_VARS=/var/tmp/bluefin-qemu-live-vars.fd; break; fi
     done
     [[ -z "$OVMF_CODE" ]] && { echo "OVMF firmware not found" >&2; exit 1; }
@@ -695,11 +701,13 @@ luks-boot-qemu-installed target:
     OVMF_CODE=""; OVMF_VARS=""
     for f in /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd \
               /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/ovmf/OVMF.fd \
+              /home/linuxbrew/.linuxbrew/share/qemu/edk2-x86_64-code.fd \
               /home/linuxbrew/.linuxbrew/Cellar/qemu/11.0.0/share/qemu/edk2-x86_64-code.fd; do
         [[ -f "$f" ]] && { OVMF_CODE="$f"; break; }
     done
     for f in /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd \
-              /usr/share/edk2/ovmf/OVMF_VARS.fd; do
+              /usr/share/edk2/ovmf/OVMF_VARS.fd \
+              /home/linuxbrew/.linuxbrew/share/qemu/edk2-i386-vars.fd; do
         if [[ -f "$f" ]]; then cp "$f" /var/tmp/bluefin-qemu-installed-vars.fd; OVMF_VARS=/var/tmp/bluefin-qemu-installed-vars.fd; break; fi
     done
     [[ -z "$OVMF_CODE" ]] && { echo "OVMF firmware not found" >&2; exit 1; }
