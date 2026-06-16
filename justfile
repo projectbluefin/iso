@@ -156,7 +156,7 @@ iso-sd-boot target:
         OVERLAY_WORK=\$(mktemp -d \"\${SQUASHFS_ROOT}_work_XXXXXX\")
 
         ns_cleanup() {
-            umount \"\${SQUASHFS_ROOT}/var/lib/containers/storage\" 2>/dev/null || true
+            umount \"\${SQUASHFS_ROOT}/usr/lib/containers/storage\" 2>/dev/null || true
             umount \"\${SQUASHFS_ROOT}\"                            2>/dev/null || true
             podman image unmount localhost/{{ target }}-installer     2>/dev/null || true
             rm -rf \"\${OVERLAY_UPPER}\" \"\${OVERLAY_WORK}\"       2>/dev/null || true
@@ -168,10 +168,10 @@ iso-sd-boot target:
         PATH=/usr/sbin:/usr/bin:/home/linuxbrew/.linuxbrew/bin:\$PATH
 
         PAYLOAD_OCI='${OUTPUT_DIR}/{{ target }}-payload.oci.tar'
-        SQUASHFS_STORAGE=\"\${CS_STAGING}/var/lib/containers/storage\"
+        SQUASHFS_STORAGE=\"\${CS_STAGING}/usr/lib/containers/storage\"
         STORAGE_CONF=\"\$(mktemp '${OUTPUT_DIR}'/live-storage-XXXXXX.conf)\"
         mkdir -p \"\${SQUASHFS_STORAGE}\"
-        printf '[storage]\ndriver = \"vfs\"\nrunroot = \"/tmp/cs-runroot\"\ngraphroot = \"/vfs-storage\"\n' \
+        printf '[storage]\ndriver = \"overlay\"\nrunroot = \"/tmp/cs-runroot\"\ngraphroot = \"/vfs-storage\"\n' \
             > \"\${STORAGE_CONF}\"
 
         echo 'Exporting squashed OCI image to archive...'
@@ -222,8 +222,8 @@ iso-sd-boot target:
             cp -a \"\${MOUNT}/.\" \"\${SQUASHFS_ROOT}/\"
         fi
 
-        mkdir -p \"\${SQUASHFS_ROOT}/var/lib/containers/storage\"
-        mount --bind \"\${CS_STAGING}/var/lib/containers/storage\" \"\${SQUASHFS_ROOT}/var/lib/containers/storage\"
+        mkdir -p \"\${SQUASHFS_ROOT}/usr/lib/containers/storage\"
+        mount --bind \"\${CS_STAGING}/usr/lib/containers/storage\" \"\${SQUASHFS_ROOT}/usr/lib/containers/storage\"
         echo '=== Disk space after creation of squashfs root ==='
         df -h '${OUTPUT_DIR}'
         if [[ '$WORKDIR' != '$OUTPUT_DIR' ]]; then

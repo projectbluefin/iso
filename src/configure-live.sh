@@ -244,7 +244,7 @@ mkdir -p /etc/xdg/autostart
 cat > /etc/xdg/autostart/tuna-installer.desktop << DTEOF
 [Desktop Entry]
 Name=Bluefin Installer
-Exec=flatpak run --env=VANILLA_CUSTOM_RECIPE=/run/host/etc/bootc-installer/recipe.json ${INSTALLER_APP_ID}
+Exec=sh -c "sleep 5 && flatpak run --filesystem=/etc/bootc-installer:ro --env=VANILLA_CUSTOM_RECIPE=/etc/bootc-installer/recipe.json ${INSTALLER_APP_ID}"
 Icon=bluefin
 Type=Application
 X-GNOME-Autostart-enabled=true
@@ -257,7 +257,7 @@ cat > /usr/share/applications/bluefin-installer.desktop << DTEOF
 [Desktop Entry]
 Name=Bluefin Installer
 Comment=Install Bluefin to your computer
-Exec=flatpak run --env=VANILLA_CUSTOM_RECIPE=/run/host/etc/bootc-installer/recipe.json ${INSTALLER_APP_ID}
+Exec=flatpak run --filesystem=/etc/bootc-installer:ro --env=VANILLA_CUSTOM_RECIPE=/etc/bootc-installer/recipe.json ${INSTALLER_APP_ID}
 Icon=bluefin
 Type=Application
 Categories=System;
@@ -332,6 +332,9 @@ cat > /etc/containers/storage.conf << 'STOREOF'
 driver = "overlay"
 runroot = "/run/containers/storage"
 graphroot = "/var/lib/containers/storage"
+additionalimagestores = [
+  "/usr/lib/containers/storage"
+]
 STOREOF
 
 # fisherman handles scratch space, OCI export, and GPT partition setup natively.
