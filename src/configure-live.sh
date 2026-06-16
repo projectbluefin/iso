@@ -240,11 +240,19 @@ touch /etc/bootc-installer/live-iso-mode
 INSTALLER_APP_ID="org.bootcinstaller.Installer"
 [[ "${INSTALLER_CHANNEL:-stable}" == "dev" ]] && INSTALLER_APP_ID="org.bootcinstaller.Installer.Devel"
 
+# Create a wrapper script to handle the delay safely without desktop entry quoting issues
+cat > /usr/bin/autostart-installer << EOF
+#!/usr/bin/bash
+sleep 5
+exec flatpak run --filesystem=/etc/bootc-installer:ro --env=VANILLA_CUSTOM_RECIPE=/etc/bootc-installer/recipe.json ${INSTALLER_APP_ID}
+EOF
+chmod +x /usr/bin/autostart-installer
+
 mkdir -p /etc/xdg/autostart
 cat > /etc/xdg/autostart/tuna-installer.desktop << DTEOF
 [Desktop Entry]
 Name=Bluefin Installer
-Exec=sh -c "sleep 5 && flatpak run --filesystem=/etc/bootc-installer:ro --env=VANILLA_CUSTOM_RECIPE=/etc/bootc-installer/recipe.json ${INSTALLER_APP_ID}"
+Exec=/usr/bin/autostart-installer
 Icon=bluefin
 Type=Application
 X-GNOME-Autostart-enabled=true
@@ -332,6 +340,8 @@ cat > /etc/containers/storage.conf << 'STOREOF'
 driver = "overlay"
 runroot = "/run/containers/storage"
 graphroot = "/var/lib/containers/storage"
+
+[storage.options]
 additionalimagestores = [
   "/usr/lib/containers/storage"
 ]
