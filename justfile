@@ -468,10 +468,11 @@ luks-install target:
     done
     $SSH liveuser@"$GUEST_IP" true || { echo "ERROR: SSH timed out"; exit 1; }
 
+    FILESYSTEM=$(just _filesystem_for "{{ target }}")
     RECIPE_TMP=$(mktemp /tmp/luks-recipe-XXXXXX.json)
     trap "rm -f '${RECIPE_TMP}'" EXIT
-    printf '{\n  "disk": "%s",\n  "filesystem": "btrfs",\n  "image": "%s",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
-        "${DISK}" "${PAYLOAD_IMAGE}" "${PASSPHRASE}" > "${RECIPE_TMP}"
+    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "%s",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
+        "${DISK}" "${FILESYSTEM}" "${PAYLOAD_IMAGE}" "${PASSPHRASE}" > "${RECIPE_TMP}"
     $SCP "${RECIPE_TMP}" liveuser@"$GUEST_IP":/tmp/luks-recipe.json
     echo "Uploaded recipe to /tmp/luks-recipe.json"
 
@@ -666,10 +667,11 @@ luks-install-qemu target:
     SSH="sshpass -p live ssh $SSH_OPTS liveuser@127.0.0.1 -p {{ luks-qemu-ssh-port }}"
     SCP="sshpass -p live scp $SSH_OPTS -P {{ luks-qemu-ssh-port }}"
 
+    FILESYSTEM=$(just _filesystem_for "{{ target }}")
     RECIPE_TMP=$(mktemp /tmp/luks-recipe-XXXXXX.json)
     trap "rm -f '${RECIPE_TMP}'" EXIT
-    printf '{\n  "disk": "%s",\n  "filesystem": "btrfs",\n  "image": "%s",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
-        "${DISK}" "${PAYLOAD_IMAGE}" "${PASSPHRASE}" > "${RECIPE_TMP}"
+    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "%s",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
+        "${DISK}" "${FILESYSTEM}" "${PAYLOAD_IMAGE}" "${PASSPHRASE}" > "${RECIPE_TMP}"
     $SCP "${RECIPE_TMP}" liveuser@127.0.0.1:/tmp/luks-recipe.json
 
     # ostree images need substantial container storage for podman pull.
