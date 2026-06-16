@@ -682,7 +682,18 @@ luks-install-qemu target:
     echo "Disk-based container storage prepared."
 
     echo "Running fisherman (pulls from registry, takes several minutes)..."
-    $SSH 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'
+    if ! $SSH 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'; then
+        echo "=== INSTALL FAILURE DIAGNOSTICS ==="
+        echo "--- dmesg ---"
+        $SSH 'sudo dmesg | tail -n 100' || true
+        echo "--- journalctl ---"
+        $SSH 'sudo journalctl -n 100 --no-pager' || true
+        echo "--- systemd-oomd status ---"
+        $SSH 'sudo systemctl status systemd-oomd --no-pager' || true
+        echo "--- podman system info ---"
+        $SSH 'sudo podman info' || true
+        exit 1
+    fi
     echo "Install complete. Shutting down live QEMU..."
     echo "system_powerdown" | sudo socat - "UNIX-CONNECT:{{ luks-qemu-monitor-live }}" 2>/dev/null || true
     sleep 5
