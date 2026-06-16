@@ -176,7 +176,7 @@ iso-sd-boot target:
 
         echo 'Exporting squashed OCI image to archive...'
         echo '=== Squashing '"${PAYLOAD_IMAGE}"' to single layer (avoids VFS explosion) ==='
-        SQUASH_CTR=\$(podman create --pull=never '"${PAYLOAD_IMAGE}"')
+        SQUASH_CTR=\$(podman create --entrypoint '["/bin/true"]' --pull=never '"${PAYLOAD_IMAGE}"')
         podman commit -s \"\${SQUASH_CTR}\" squash-temp-image
         podman tag squash-temp-image '"${PAYLOAD_IMAGE}"'
         podman save -o \"\${PAYLOAD_OCI}\" --format oci-archive '"${PAYLOAD_IMAGE}"'
