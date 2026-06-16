@@ -185,6 +185,26 @@ WantedBy=local-fs.target
 UNITEOF
 systemctl enable var-tmp.mount
 
+# ── Additional container storage bind mount ───────────────────────────────────
+# Bind-mount the read-only SquashFS cache from /usr/lib/containers/storage
+# to /var/lib/containers/storage-additional so that it is visible inside the
+# podman container namespaces during offline installation.
+cat > "/usr/lib/systemd/system/var-lib-containers-storage\x2dadditional.mount" << 'UNITEOF'
+[Unit]
+Description=Mount additional containers storage cache
+After=local-fs.target
+
+[Mount]
+What=/usr/lib/containers/storage
+Where=/var/lib/containers/storage-additional
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target
+UNITEOF
+systemctl enable "var-lib-containers-storage\x2dadditional.mount"
+
 # ── Live-ready marker service ─────────────────────────────────────────────────
 # Prints BLUEFIN_LIVE_READY to the serial console after display-manager.service
 # starts.  CI boot verification greps for this token in the serial log.
