@@ -16,13 +16,14 @@ permissions:
 
 jobs:
   luks-e2e:
-    name: LUKS E2E (${{ matrix.installer_channel }})
+    name: LUKS E2E (${{ matrix.target }}, ${{ matrix.installer_channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         installer_channel: [dev, stable]
+        target: [bluefin, bluefin-lts]
 
     steps:
       - name: Checkout
@@ -72,7 +73,7 @@ jobs:
         run: |
           START=$(date +%s)
           sudo mkdir -p /var/iso-build
-          sudo $(command -v just) debug=1 installer_channel=${{ matrix.installer_channel }} output_dir=/var/iso-build iso-sd-boot bluefin
+          sudo $(command -v just) debug=1 installer_channel=${{ matrix.installer_channel }} output_dir=/var/iso-build iso-sd-boot ${{ matrix.target }}
           mkdir -p output
           sudo cp /var/iso-build/*.iso output/ 2>/dev/null || true
           sudo chown -R "$USER:$(id -gn)" output/
@@ -87,7 +88,7 @@ jobs:
         id: luks_test
         run: |
           START=$(date +%s)
-          just luks-test-qemu bluefin
+          just luks-test-qemu ${{ matrix.target }}
           echo "duration=$(( $(date +%s) - START ))" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 
@@ -109,7 +110,7 @@ jobs:
             convert "$src_ppm" "$png" 2>/dev/null || return 0
             [[ -f "$png" ]] || return 0
 
-            local path_in_repo="luks-e2e/${RUN_ID}/${{ matrix.installer_channel }}/${label}.png"
+            local path_in_repo="luks-e2e/${RUN_ID}/${{ matrix.target }}/${{ matrix.installer_channel }}/${label}.png"
             local existing_sha
             existing_sha=$(gh api "/repos/${REPO}/contents/${path_in_repo}?ref=ci-screenshots" \
               --jq '.sha' 2>/dev/null || echo "")
@@ -153,10 +154,12 @@ jobs:
           ISO_BYTES:         ${{ steps.build.outputs.iso_size }}
           TEST_RESULT:       ${{ steps.luks_test.outcome }}
           INSTALLER_CHANNEL: ${{ matrix.installer_channel }}
+          TARGET:            ${{ matrix.target }}
         with:
           script: |
             const result  = process.env.TEST_RESULT || 'unknown';
             const channel = process.env.INSTALLER_CHANNEL || 'unknown';
+            const target  = process.env.TARGET || 'unknown';
             const pass    = result === 'success';
             const icon    = pass ? '✅' : '❌';
             const runUrl  = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -167,7 +170,7 @@ jobs:
             const img = (url, alt) => url ? `**${alt}**\n![${alt}](${url})\n` : '';
 
             const body = [
-              `## ${icon} LUKS End-to-End Test (${channel}) — ${pass ? 'PASSED' : 'FAILED'}`,
+              `## ${icon} LUKS End-to-End Test (${target}, ${channel}) — ${pass ? 'PASSED' : 'FAILED'}`,
               '',
               '| Step | Details |',
               '|------|---------|',
@@ -193,9 +196,10 @@ jobs:
         run: |
           RESULT="${{ steps.luks_test.outcome }}"
           CHANNEL="${{ matrix.installer_channel }}"
+          TARGET="${{ matrix.target }}"
           ICON=$( [ "$RESULT" = "success" ] && echo "✅" || echo "❌" )
           {
-            echo "## ${ICON} LUKS End-to-End Test (${CHANNEL}) — ${RESULT}"
+            echo "## ${ICON} LUKS End-to-End Test (${TARGET}, ${CHANNEL}) — ${RESULT}"
             echo ""
             echo "| Step | Value |"
             echo "|------|-------|"
@@ -213,7 +217,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: luks-e2e-serial-logs-${{ matrix.installer_channel }}
+          name: luks-e2e-serial-logs-${{ matrix.target }}-${{ matrix.installer_channel }}
           path: |
             /tmp/bluefin-qemu-live-serial.log
             /tmp/bluefin-qemu-installed-serial.log
