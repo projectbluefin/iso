@@ -652,7 +652,8 @@ luks-boot-qemu-live target:
         sleep 5
     done
 
-    sleep 2
+    echo "Live environment ready. Waiting 25s for GUI to fully render..."
+    sleep 25
     sudo socat - "UNIX-CONNECT:{{ luks-qemu-monitor-live }}" \
         <<< "screendump /tmp/luks-screenshot-live.ppm" 2>/dev/null || true
 
