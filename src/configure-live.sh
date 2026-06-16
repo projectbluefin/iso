@@ -185,24 +185,14 @@ WantedBy=local-fs.target
 UNITEOF
 systemctl enable var-tmp.mount
 
-# ── Additional container storage bind mount ───────────────────────────────────
-# Bind-mount the read-only SquashFS cache from /usr/lib/containers/storage
-# to /var/lib/containers/storage-additional so that it is visible inside the
-# podman container namespaces during offline installation.
-cat > "/usr/lib/systemd/system/var-lib-containers-storage\x2dadditional.mount" << 'UNITEOF'
-[Unit]
-Description=Mount additional containers storage cache
+# ── Default mounts for containers ─────────────────────────────────────────────
+# Automatically bind-mount the read-only SquashFS cache at /usr/lib/containers/storage
+# from the host into all container namespaces, allowing offline installation to work.
+mkdir -p /etc/containers
+cat > /etc/containers/mounts.conf << 'EOF'
+/usr/lib/containers/storage:/usr/lib/containers/storage
+EOF
 
-[Mount]
-What=/usr/lib/containers/storage
-Where=/var/lib/containers/storage-additional
-Type=none
-Options=bind
-
-[Install]
-WantedBy=local-fs.target
-UNITEOF
-systemctl enable "var-lib-containers-storage\x2dadditional.mount"
 
 # ── Live-ready marker service ─────────────────────────────────────────────────
 # Prints BLUEFIN_LIVE_READY to the serial console after display-manager.service
@@ -362,7 +352,7 @@ graphroot = "/var/lib/containers/storage"
 
 [storage.options]
 additionalimagestores = [
-  "/var/lib/containers/storage-additional"
+  "/usr/lib/containers/storage"
 ]
 STOREOF
 

@@ -676,7 +676,7 @@ luks-install-qemu target:
     echo "Preparing disk-based container storage on /dev/vdb..."
     CS_SETUP=$(mktemp /tmp/cs-setup-XXXXXX.sh)
     trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}'" EXIT
-    printf '#!/bin/bash\nset -euo pipefail\nCS_DISK=/dev/vdb\necho "Formatting $CS_DISK as ext4..."\nmkfs.ext4 -q -F "$CS_DISK"\nmount "$CS_DISK" /var/lib/containers\nmkdir -p /var/lib/containers/storage-additional\nmount --bind /usr/lib/containers/storage /var/lib/containers/storage-additional\necho "Container storage ready on $CS_DISK"\n' > "${CS_SETUP}"
+    printf '#!/bin/bash\nset -euo pipefail\nCS_DISK=/dev/vdb\necho "Formatting $CS_DISK as ext4..."\nmkfs.ext4 -q -F "$CS_DISK"\nmount "$CS_DISK" /var/lib/containers\necho "Container storage ready on $CS_DISK"\n' > "${CS_SETUP}"
     $SCP "${CS_SETUP}" liveuser@127.0.0.1:/tmp/cs-setup.sh
     $SSH 'sudo bash /tmp/cs-setup.sh'
     echo "Disk-based container storage prepared."
