@@ -192,7 +192,6 @@ systemctl enable var-tmp.mount
 cat > "/usr/lib/systemd/system/var-lib-containers-storage\x2dadditional.mount" << 'UNITEOF'
 [Unit]
 Description=Mount additional containers storage cache
-After=local-fs.target
 
 [Mount]
 What=/usr/lib/containers/storage
