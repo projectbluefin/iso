@@ -354,7 +354,9 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
     passphrase_time = time.time()
     passphrase_hash = prev_hash  # Plymouth hash at time of passphrase send
     screen_changed = False
-    gnome_stable_count = 0
+    gnome_bright_count = 0
+    emergency_stable_count = 0
+
 
     while time.time() < deadline:
         result = qemu_check_serial(serial_log)
@@ -436,39 +438,55 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
                 pass
             sys.exit(0)
 
-        # Fallback: no serial console (console=ttyS0 absent).  Use framebuffer
-        # brightness to distinguish GDM (~2.4) from emergency shell (~1.0).
-        # Only trigger once the screen has re-stabilised after the initial
-        # post-passphrase animation.  GDM re-renders continuously (cursor
-        # blink, animations), so we cannot require many consecutive identical
-        # frames — 1 stable poll is sufficient to confirm the screen settled.
-        GNOME_THRESHOLD    = 1.8
-        GNOME_STABLE_POLLS = 1   # 1 stable poll is enough; GDM keeps rendering
-        if md5 == prev_hash:
-            gnome_stable_count += 1
-        else:
-            gnome_stable_count = 0
+        # Fallback: no serial console (console=ttyS0 absent). Use framebuffer
+        # brightness to distinguish GDM from emergency shell.
+        # GDM re-renders continuously (cursor blink, animations, clock), so we
+        # cannot require identical hashes. Instead, we detect GDM by verifying
+        # the screen remains bright for multiple consecutive polls.
+        # For the emergency shell, which is static and dark, we require identical
+        # hashes and low brightness.
+        GNOME_THRESHOLD = 1.8
+        GNOME_BRIGHT_POLLS = 2  # Screen remains bright for 2 polls (~10s)
+        EMERGENCY_STABLE_POLLS = 3  # Screen remains stable and dark for 3 polls (~15s)
 
-        if screen_changed and gnome_stable_count >= GNOME_STABLE_POLLS:
+        if screen_changed:
             if brightness > GNOME_THRESHOLD:
+                gnome_bright_count += 1
+            else:
+                gnome_bright_count = 0
+
+            if md5 == prev_hash and brightness <= GNOME_THRESHOLD:
+                emergency_stable_count += 1
+            else:
+                emergency_stable_count = 0
+
+            if gnome_bright_count >= GNOME_BRIGHT_POLLS:
                 print(
                     f"[luks-unlock] RESULT: boot succeeded"
-                    f" (framebuffer stable {gnome_stable_count} polls,"
+                    f" (framebuffer bright for {gnome_bright_count} polls,"
                     f" brightness={brightness:.2f})",
                     flush=True,
                 )
-            else:
+                try:
+                    import shutil
+                    shutil.copy2(snap, "/tmp/luks-screenshot-final.ppm")
+                except OSError:
+                    pass
+                sys.exit(0)
+
+            if emergency_stable_count >= EMERGENCY_STABLE_POLLS:
                 print(
                     f"[luks-unlock] RESULT: emergency shell suspected"
-                    f" (framebuffer stable but dark, brightness={brightness:.2f})",
+                    f" (framebuffer stable and dark for {emergency_stable_count} polls,"
+                    f" brightness={brightness:.2f})",
                     flush=True,
                 )
-            try:
-                import shutil
-                shutil.copy2(snap, "/tmp/luks-screenshot-final.ppm")
-            except OSError:
-                pass
-            sys.exit(0 if brightness > GNOME_THRESHOLD else 2)
+                try:
+                    import shutil
+                    shutil.copy2(snap, "/tmp/luks-screenshot-final.ppm")
+                except OSError:
+                    pass
+                sys.exit(2)
 
         prev_hash = md5
         time.sleep(5)
