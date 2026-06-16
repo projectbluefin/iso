@@ -343,7 +343,7 @@ graphroot = "/var/lib/containers/storage"
 
 [storage.options]
 additionalimagestores = [
-  "/usr/lib/containers/storage"
+  "/var/lib/containers/storage-additional"
 ]
 STOREOF
 
