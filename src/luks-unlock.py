@@ -371,6 +371,8 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
         if ssh_port and ssh_reachable(ssh_port):
             print(f"[luks-unlock] RESULT: boot succeeded (sshd banner on port {ssh_port})",
                   flush=True)
+            print("[luks-unlock] Waiting 20s for GDM/desktop to fully render...", flush=True)
+            time.sleep(20)
             try:
                 import shutil
                 qemu_screendump(monitor_sock, snap)
@@ -415,7 +417,8 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
         # gnome-initial-setup fires after GDM — screenshot taken immediately.
         # If only GDM is seen, wait 30s as a fallback in case g-i-s is slow.
         if result == "gnome-initial-setup":
-            print("[luks-unlock] gnome-initial-setup started (serial confirmed) — taking screenshot", flush=True)
+            print("[luks-unlock] gnome-initial-setup started (serial confirmed) — waiting 15s to render UI", flush=True)
+            time.sleep(15)
             brightness, md5 = qemu_screendump(monitor_sock, snap)
             print(f"[luks-unlock] RESULT: boot succeeded (g-i-s confirmed via serial, brightness={brightness:.2f})", flush=True)
         elif result == "gdm":
@@ -467,8 +470,11 @@ def run_qemu(monitor_sock: str, passphrase: str, serial_log: str, ssh_port: int 
                     f" brightness={brightness:.2f})",
                     flush=True,
                 )
+                print("[luks-unlock] Waiting 25s for GDM/desktop to fully render...", flush=True)
+                time.sleep(25)
                 try:
                     import shutil
+                    qemu_screendump(monitor_sock, snap)
                     shutil.copy2(snap, "/tmp/luks-screenshot-final.ppm")
                 except OSError:
                     pass
