@@ -682,8 +682,15 @@ luks-install-qemu target:
 
     # Use the fisherman already installed on the live ISO (Flatpak).
     # bootcDirect doesn't need any of our patches — it runs bootc natively.
+    # Build patched fisherman for the direct-mode --source-imgref fix.
+    FISHER_REPO="${FISHER_REPO:-{{ fisher_repo }}}"
+    FISHERMAN_BIN=$(mktemp /tmp/fisherman-XXXXXX)
+    trap "rm -f '${RECIPE_TMP}' '${FISHERMAN_BIN}'" EXIT
+    (cd "${FISHER_REPO}" && CGO_ENABLED=0 go build -o "${FISHERMAN_BIN}" ./cmd/fisherman/)
+    $SCP "${FISHERMAN_BIN}" liveuser@127.0.0.1:/tmp/fisherman
+    $SSH 'chmod +x /tmp/fisherman'
     echo "Running fisherman (direct bootc install, takes several minutes)..."
-    if ! $SSH 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'; then
+    if ! $SSH 'sudo /tmp/fisherman /tmp/luks-recipe.json'; then
         echo "=== INSTALL FAILURE DIAGNOSTICS ==="
         echo "--- dmesg ---"
         $SSH 'sudo dmesg | tail -n 100' || true
