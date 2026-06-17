@@ -547,7 +547,7 @@ luks-qemu-serial-installed := "/tmp/bluefin-qemu-installed-serial.log"
 luks-qemu-ssh-port := "2222"
 # SSH port forwarded into the installed (post-LUKS-unlock) VM for boot detection.
 luks-qemu-ssh-port-installed := "2223"
-luks-qemu-ram := "16384"
+luks-qemu-ram := "8192"
 
 # Full end-to-end test: build the ISO then run the LUKS install + boot test.
 e2e target:
