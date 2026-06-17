@@ -177,14 +177,7 @@ iso-sd-boot target:
         printf '[storage]\ndriver = \"overlay\"\nrunroot = \"/tmp/cs-runroot\"\ngraphroot = \"/vfs-storage\"\n' \
             > \"\${STORAGE_CONF}\"
 
-        echo 'Exporting squashed OCI image to archive...'
-        echo '=== Squashing '"${PAYLOAD_IMAGE}"' to single layer (avoids VFS explosion) ==='
-        SQUASH_CTR=\$(podman create --entrypoint '["/bin/true"]' --pull=never '"${PAYLOAD_IMAGE}"')
-        podman commit -s \"\${SQUASH_CTR}\" squash-temp-image
-        podman tag squash-temp-image '"${PAYLOAD_IMAGE}"'
         podman save -o \"\${PAYLOAD_OCI}\" --format oci-archive '"${PAYLOAD_IMAGE}"'
-        podman rm \"\${SQUASH_CTR}\"
-        podman rmi squash-temp-image '"${PAYLOAD_IMAGE}"' || true
 
 
         echo 'Importing Bluefin OCI image into squashfs containers-storage...'
@@ -765,7 +758,7 @@ luks-boot-qemu-installed target:
 
 # Send LUKS passphrase to installed QEMU VM via monitor screendump + sendkey.
 # luks-qemu-ssh-port-installed: forwarded SSH port for boot-completion detection
-#   (0 = disabled, use framebuffer fallback only)
+# (0 = disabled, use framebuffer fallback only)
 luks-unlock-qemu target:
     #!/usr/bin/bash
     set -euo pipefail
