@@ -93,9 +93,11 @@ jobs:
 
       - name: Run LUKS end-to-end test
         id: luks_test
+        env:
+          FISHER_REPO: /tmp/fisherman
         run: |
           START=$(date +%s)
-          just fisher_repo=/tmp/fisherman luks-test-qemu ${{ matrix.target }}
+          just luks-test-qemu ${{ matrix.target }}
           echo "duration=$(( $(date +%s) - START ))" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 

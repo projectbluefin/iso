@@ -692,9 +692,10 @@ luks-install-qemu target:
     # Build and upload the patched fisherman with overlay driver support.
     # Without overlay, VFS copies every image layer byte-for-byte, OOM-killing
     # the VM on large ostree images (>4 GB).  See projectbluefin/fisherman#fix/overlay-driver-for-ostree-bootc-install.
+    FISHER_REPO="${FISHER_REPO:-{{ fisher_repo }}}"
     FISHERMAN_BIN=$(mktemp /tmp/fisherman-XXXXXX)
     trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}' '${FISHERMAN_BIN}'" EXIT
-    (cd "{{ fisher_repo }}" && CGO_ENABLED=0 go build -o "${FISHERMAN_BIN}" ./cmd/fisherman/)
+    (cd "${FISHER_REPO}" && CGO_ENABLED=0 go build -o "${FISHERMAN_BIN}" ./cmd/fisherman/)
     $SCP "${FISHERMAN_BIN}" liveuser@127.0.0.1:/tmp/fisherman
     $SSH 'chmod +x /tmp/fisherman'
 
