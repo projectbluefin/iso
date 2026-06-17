@@ -539,7 +539,6 @@ luks-boot target:
 # ── QEMU-native LUKS test (used by CI; mirrors the libvirt recipes) ───────────
 
 luks-qemu-disk := "/var/tmp/bluefin-luks-install.qcow2"
-luks-qemu-cs-disk := "/var/tmp/bluefin-luks-cs.qcow2"
 luks-qemu-monitor-live := "/tmp/bluefin-qemu-live.sock"
 luks-qemu-monitor-installed := "/tmp/bluefin-qemu-installed.sock"
 luks-qemu-serial-live := "/tmp/bluefin-qemu-live-serial.log"
@@ -547,7 +546,7 @@ luks-qemu-serial-installed := "/tmp/bluefin-qemu-installed-serial.log"
 luks-qemu-ssh-port := "2222"
 # SSH port forwarded into the installed (post-LUKS-unlock) VM for boot detection.
 luks-qemu-ssh-port-installed := "2223"
-luks-qemu-ram := "10240"
+luks-qemu-ram := "12288"
 
 # Full end-to-end test: build the ISO then run the LUKS install + boot test.
 e2e target:
@@ -556,7 +555,7 @@ e2e target:
     echo "=== Step 1/2: Building ISO (debug={{ debug }}, installer_channel={{ installer_channel }}) ==="
     just debug={{ debug }} installer_channel={{ installer_channel }} output_dir={{ output_dir }} iso-sd-boot {{ target }}
     echo "=== Step 2/2: LUKS end-to-end test ==="
-    sudo rm -f "{{ luks-qemu-disk }}" "{{ luks-qemu-cs-disk }}" "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-monitor-installed }}" \
+    sudo rm -f "{{ luks-qemu-disk }}" "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-monitor-installed }}" \
                "{{ luks-qemu-serial-live }}" "{{ luks-qemu-serial-installed }}"
     just luks-test-qemu {{ target }}
 
@@ -607,7 +606,6 @@ luks-boot-qemu-live target:
     [[ -z "$OVMF_CODE" ]] && { echo "OVMF firmware not found" >&2; exit 1; }
 
     [[ -f "{{ luks-qemu-disk }}" ]] || qemu-img create -f qcow2 "{{ luks-qemu-disk }}" 64G
-    [[ -f "{{ luks-qemu-cs-disk }}" ]] || qemu-img create -f qcow2 "{{ luks-qemu-cs-disk }}" 25G
     sudo rm -f "{{ luks-qemu-monitor-live }}" "{{ luks-qemu-serial-live }}"
 
     echo "Booting live ISO: $ISO"
@@ -632,8 +630,6 @@ luks-boot-qemu-live target:
         -device scsi-cd,drive=iso \
         -drive "if=none,id=disk,file={{ luks-qemu-disk }},format=qcow2" \
         -device virtio-blk-pci,drive=disk \
-        -drive "if=none,id=csdisk,file={{ luks-qemu-cs-disk }},format=qcow2" \
-        -device virtio-blk-pci,drive=csdisk \
         -netdev "user,id=net0,hostfwd=tcp::{{ luks-qemu-ssh-port }}-:22" \
         -device virtio-net-pci,netdev=net0 \
         -monitor "unix:{{ luks-qemu-monitor-live }},server,nowait" \
