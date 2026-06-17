@@ -60,6 +60,11 @@ jobs:
             qemu-system-x86 ovmf socat sshpass \
             imagemagick -qq
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
       - name: Log in to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | \
