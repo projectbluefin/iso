@@ -68,6 +68,13 @@ jobs:
       - name: Configure podman storage (intelligent driver selection)
         run: bash .github/scripts/configure_podman_storage.sh
 
+      - name: Clone patched fisherman (overlay driver for ostree)
+        run: |
+          git clone https://github.com/projectbluefin/fisherman.git \
+            --branch fix/overlay-driver-for-ostree-bootc-install \
+            --depth 1 \
+            /tmp/fisherman
+
       - name: Build debug ISO
         id: build
         run: |
@@ -88,7 +95,7 @@ jobs:
         id: luks_test
         run: |
           START=$(date +%s)
-          just luks-test-qemu ${{ matrix.target }}
+          just fisher_repo=/tmp/fisherman luks-test-qemu ${{ matrix.target }}
           echo "duration=$(( $(date +%s) - START ))" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 

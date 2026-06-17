@@ -25,6 +25,9 @@ luks-passphrase := "testpassphrase"
 #   release           — zstd level 15, 1M blocks   — ~20% smaller, ~5× slower
 compression := "fast"
 
+# Path to the projectbluefin/fisherman repo for building the patched fisherman binary.
+fisher_repo := "../fisherman/fisherman"
+
 # Create an XFS loopback mount at /mnt for faster VFS import.
 mount-xfs:
     #!/usr/bin/bash
@@ -678,17 +681,25 @@ luks-install-qemu target:
 
     # ostree images need substantial container storage for podman pull.
     # Use the second disk (/dev/vdb, 25G) to avoid fisherman wiping /dev/vda.
-    # VFS driver works on any filesystem; overlay-on-overlayfs is unsupported.
     echo "Preparing disk-based container storage on /dev/vdb..."
     CS_SETUP=$(mktemp /tmp/cs-setup-XXXXXX.sh)
     trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}'" EXIT
-    printf '#!/bin/bash\nset -euo pipefail\nCS_DISK=/dev/vdb\necho "Formatting $CS_DISK as ext4..."\nmkfs.ext4 -q -F "$CS_DISK"\nmount "$CS_DISK" /var/lib/containers\necho "Creating 8G swapfile on /var/lib/containers..."\nfallocate -l 8G /var/lib/containers/swapfile\nchmod 600 /var/lib/containers/swapfile\nmkswap /var/lib/containers/swapfile\nswapon /var/lib/containers/swapfile\necho "Container storage ready on $CS_DISK"\n' > "${CS_SETUP}"
+    printf '#!/bin/bash\nset -euo pipefail\nCS_DISK=/dev/vdb\necho "Formatting $CS_DISK as ext4..."\nmkfs.ext4 -q -F "$CS_DISK"\nmount "$CS_DISK" /var/lib/containers\necho "Container storage ready on $CS_DISK"\n' > "${CS_SETUP}"
     $SCP "${CS_SETUP}" liveuser@127.0.0.1:/tmp/cs-setup.sh
     $SSH 'sudo bash /tmp/cs-setup.sh'
     echo "Disk-based container storage prepared."
 
+    # Build and upload the patched fisherman with overlay driver support.
+    # Without overlay, VFS copies every image layer byte-for-byte, OOM-killing
+    # the VM on large ostree images (>4 GB).  See projectbluefin/fisherman#fix/overlay-driver-for-ostree-bootc-install.
+    FISHERMAN_BIN=$(mktemp /tmp/fisherman-XXXXXX)
+    trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}' '${FISHERMAN_BIN}'" EXIT
+    (cd "{{ fisher_repo }}" && CGO_ENABLED=0 go build -o "${FISHERMAN_BIN}" ./cmd/fisherman/)
+    $SCP "${FISHERMAN_BIN}" liveuser@127.0.0.1:/tmp/fisherman
+    $SSH 'chmod +x /tmp/fisherman'
+
     echo "Running fisherman (pulls from registry, takes several minutes)..."
-    if ! $SSH 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'; then
+    if ! $SSH 'sudo /tmp/fisherman /tmp/luks-recipe.json'; then
         echo "=== INSTALL FAILURE DIAGNOSTICS ==="
         echo "--- dmesg ---"
         $SSH 'sudo dmesg | tail -n 100' || true
