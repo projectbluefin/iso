@@ -676,31 +676,22 @@ luks-install-qemu target:
     FILESYSTEM=$(just _filesystem_for "{{ target }}")
     RECIPE_TMP=$(mktemp /tmp/luks-recipe-XXXXXX.json)
     trap "rm -f '${RECIPE_TMP}'" EXIT
-    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "%s",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
-        "${DISK}" "${FILESYSTEM}" "${PAYLOAD_IMAGE}" "${PASSPHRASE}" > "${RECIPE_TMP}"
+    # Use containers-storage so fisherman reads the image from the ISO's embedded
+    # store (at /usr/lib/containers/storage).  No network pull, no second disk.
+    # Match the Dakota pattern: embedded image → OCI export → overlay on target.
+    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "containers-storage:'"${PAYLOAD_IMAGE}"'",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
+        "${DISK}" "${FILESYSTEM}" "${PASSPHRASE}" > "${RECIPE_TMP}"
     $SCP "${RECIPE_TMP}" liveuser@127.0.0.1:/tmp/luks-recipe.json
 
-    # ostree images need substantial container storage for podman pull.
-    # Use the second disk (/dev/vdb, 25G) to avoid fisherman wiping /dev/vda.
-    echo "Preparing disk-based container storage on /dev/vdb..."
-    CS_SETUP=$(mktemp /tmp/cs-setup-XXXXXX.sh)
-    trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}'" EXIT
-    printf '#!/bin/bash\nset -euo pipefail\nCS_DISK=/dev/vdb\necho "Formatting $CS_DISK as ext4..."\nmkfs.ext4 -q -F "$CS_DISK"\nmount "$CS_DISK" /var/lib/containers\necho "Container storage ready on $CS_DISK"\n' > "${CS_SETUP}"
-    $SCP "${CS_SETUP}" liveuser@127.0.0.1:/tmp/cs-setup.sh
-    $SSH 'sudo bash /tmp/cs-setup.sh'
-    echo "Disk-based container storage prepared."
-
-    # Build and upload the patched fisherman with overlay driver support.
-    # Without overlay, VFS copies every image layer byte-for-byte, OOM-killing
-    # the VM on large ostree images (>4 GB).  See projectbluefin/fisherman#fix/overlay-driver-for-ostree-bootc-install.
+    # Build and upload the patched fisherman with overlay+OCI support.
     FISHER_REPO="${FISHER_REPO:-{{ fisher_repo }}}"
     FISHERMAN_BIN=$(mktemp /tmp/fisherman-XXXXXX)
-    trap "rm -f '${RECIPE_TMP}' '${CS_SETUP}' '${FISHERMAN_BIN}'" EXIT
+    trap "rm -f '${RECIPE_TMP}' '${FISHERMAN_BIN}'" EXIT
     (cd "${FISHER_REPO}" && CGO_ENABLED=0 go build -o "${FISHERMAN_BIN}" ./cmd/fisherman/)
     $SCP "${FISHERMAN_BIN}" liveuser@127.0.0.1:/tmp/fisherman
     $SSH 'chmod +x /tmp/fisherman'
 
-    echo "Running fisherman (pulls from registry, takes several minutes)..."
+    echo "Running fisherman (embedded image, target-disk overlay, takes several minutes)..."
     if ! $SSH 'sudo /tmp/fisherman /tmp/luks-recipe.json'; then
         echo "=== INSTALL FAILURE DIAGNOSTICS ==="
         echo "--- dmesg ---"
