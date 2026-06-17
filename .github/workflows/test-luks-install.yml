@@ -60,11 +60,6 @@ jobs:
             qemu-system-x86 ovmf socat sshpass \
             imagemagick -qq
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
       - name: Log in to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | \
@@ -72,13 +67,6 @@ jobs:
 
       - name: Configure podman storage (intelligent driver selection)
         run: bash .github/scripts/configure_podman_storage.sh
-
-      - name: Clone patched fisherman (overlay driver for ostree)
-        run: |
-          git clone https://github.com/projectbluefin/fisherman.git \
-            --branch fix/overlay-driver-for-ostree-bootc-install \
-            --depth 1 \
-            /tmp/fisherman
 
       - name: Build debug ISO
         id: build
@@ -98,8 +86,6 @@ jobs:
 
       - name: Run LUKS end-to-end test
         id: luks_test
-        env:
-          FISHER_REPO: /tmp/fisherman/fisherman
         run: |
           START=$(date +%s)
           just luks-test-qemu ${{ matrix.target }}

@@ -546,7 +546,7 @@ luks-qemu-serial-installed := "/tmp/bluefin-qemu-installed-serial.log"
 luks-qemu-ssh-port := "2222"
 # SSH port forwarded into the installed (post-LUKS-unlock) VM for boot detection.
 luks-qemu-ssh-port-installed := "2223"
-luks-qemu-ram := "12288"
+luks-qemu-ram := "8192"
 
 # Full end-to-end test: build the ISO then run the LUKS install + boot test.
 e2e target:
@@ -672,23 +672,17 @@ luks-install-qemu target:
     FILESYSTEM=$(just _filesystem_for "{{ target }}")
     RECIPE_TMP=$(mktemp /tmp/luks-recipe-XXXXXX.json)
     trap "rm -f '${RECIPE_TMP}'" EXIT
-    # Use containers-storage so fisherman reads the image from the ISO's embedded
-    # store (at /usr/lib/containers/storage).  No network pull, no second disk.
-    # Match the Dakota pattern: embedded image → OCI export → overlay on target.
-    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "containers-storage:'"${PAYLOAD_IMAGE}"'",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
+    # Empty image triggers bootcDirect: fisherman runs `bootc install
+    # to-filesystem` natively on the live ISO (which IS the Bluefin image).
+    # No podman, no OCI export, no overlay, no RAM issues.
+    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
         "${DISK}" "${FILESYSTEM}" "${PASSPHRASE}" > "${RECIPE_TMP}"
     $SCP "${RECIPE_TMP}" liveuser@127.0.0.1:/tmp/luks-recipe.json
 
-    # Build and upload the patched fisherman with overlay+OCI support.
-    FISHER_REPO="${FISHER_REPO:-{{ fisher_repo }}}"
-    FISHERMAN_BIN=$(mktemp /tmp/fisherman-XXXXXX)
-    trap "rm -f '${RECIPE_TMP}' '${FISHERMAN_BIN}'" EXIT
-    (cd "${FISHER_REPO}" && CGO_ENABLED=0 go build -o "${FISHERMAN_BIN}" ./cmd/fisherman/)
-    $SCP "${FISHERMAN_BIN}" liveuser@127.0.0.1:/tmp/fisherman
-    $SSH 'chmod +x /tmp/fisherman'
-
-    echo "Running fisherman (embedded image, target-disk overlay, takes several minutes)..."
-    if ! $SSH 'sudo /tmp/fisherman /tmp/luks-recipe.json'; then
+    # Use the fisherman already installed on the live ISO (Flatpak).
+    # bootcDirect doesn't need any of our patches — it runs bootc natively.
+    echo "Running fisherman (direct bootc install, takes several minutes)..."
+    if ! $SSH 'sudo /usr/local/bin/fisherman /tmp/luks-recipe.json'; then
         echo "=== INSTALL FAILURE DIAGNOSTICS ==="
         echo "--- dmesg ---"
         $SSH 'sudo dmesg | tail -n 100' || true
