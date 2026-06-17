@@ -182,10 +182,9 @@ iso-sd-boot target:
         # Preserve ostree.final-diffid annotation for bootc ostree installs
         OSTREE_DIFFID=\$(podman image inspect "${PAYLOAD_IMAGE}" --format '{{ "{{" }}index .Annotations "ostree.final-diffid"{{ "}}" }}' 2>/dev/null || true)
         SQUASH_CTR=\$(podman create --entrypoint '["/bin/true"]' --pull=never '"${PAYLOAD_IMAGE}"')
+        podman commit -s "\${SQUASH_CTR}" squash-temp-image
         if [ -n "\${OSTREE_DIFFID}" ]; then
-            podman commit -s --annotation ostree.final-diffid="\${OSTREE_DIFFID}" "\${SQUASH_CTR}" squash-temp-image
-        else
-            podman commit -s "\${SQUASH_CTR}" squash-temp-image
+            podman image set-annotation squash-temp-image ostree.final-diffid="\${OSTREE_DIFFID}"
         fi
         podman tag squash-temp-image '"${PAYLOAD_IMAGE}"'
         podman save -o \"\${PAYLOAD_OCI}\" --format oci-archive '"${PAYLOAD_IMAGE}"'
