@@ -96,14 +96,24 @@ removed from CI.
 
 ## Current status
 
-**Last CI run:** `27687334655` (failed) — bootc found the embedded containers-storage
-image but the squashed image lost its `ostree.final-diffid` annotation.
+**Last proven success:** run `27685994836` — ALL 4 matrix jobs PASSED
+with `--source-imgref docker://ghcr.io/ublue-os/bluefin:stable` (docker:// transport)
++bootcDirect at 8 GB VM RAM.  The live ISO VM has NAT networking via QEMU
+`-netdev user` so docker:// pulls work in CI.
 
-**Fix applied:** justfile now preserves the `ostree.final-diffid` annotation during
-the `podman commit -s` squashing step.  The annotation is extracted from the original
-image and passed back via `--annotation` when creating the single-layer image.
+**Trade-off:** docker:// requires a registry pull (~4.8 GB) every run.  The
+embedded containers-storage at `/usr/lib/containers/storage` is bypassed.
+This is fine for CI but defeats offline-install capability.
 
-**Pending:** CI run with annotation preservation fix (push after this handoff).
+**Current attempt:** `containers-storage:` transport + `ostree.final-diffid`
+annotation fix.  CI run `27689531404` in progress.
+
+**What's blocking `containers-storage:`:** the ISO build squashes the image
+to a single layer via `podman commit -s`, which strips ostree annotations.
+The justfile now preserves `ostree.final-diffid` during squashing.
+
+**Fallback if `containers-storage:` fails:** stick with `docker://` transport
+(docker:// is proven working, just slower for CI).
 
 **Previous failure chain:**
 
