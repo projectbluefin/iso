@@ -99,7 +99,7 @@ jobs:
       - name: Run LUKS end-to-end test
         id: luks_test
         env:
-          FISHER_REPO: /tmp/fisherman
+          FISHER_REPO: /tmp/fisherman/fisherman
         run: |
           START=$(date +%s)
           just luks-test-qemu ${{ matrix.target }}
