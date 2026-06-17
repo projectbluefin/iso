@@ -179,8 +179,14 @@ iso-sd-boot target:
 
         echo 'Exporting squashed OCI image to archive...'
         echo '=== Squashing '"${PAYLOAD_IMAGE}"' to single layer (avoids VFS explosion) ==='
+        # Preserve ostree.final-diffid annotation for bootc ostree installs
+        OSTREE_DIFFID=\$(podman image inspect "\${PAYLOAD_IMAGE}" --format '{{ "{{" }}index .Annotations "ostree.final-diffid"{{ "}}" }}' 2>/dev/null || true)
         SQUASH_CTR=\$(podman create --entrypoint '["/bin/true"]' --pull=never '"${PAYLOAD_IMAGE}"')
-        podman commit -s \"\${SQUASH_CTR}\" squash-temp-image
+        if [ -n "\${OSTREE_DIFFID}" ]; then
+            podman commit -s --annotation ostree.final-diffid="\${OSTREE_DIFFID}" "\${SQUASH_CTR}" squash-temp-image
+        else
+            podman commit -s "\${SQUASH_CTR}" squash-temp-image
+        fi
         podman tag squash-temp-image '"${PAYLOAD_IMAGE}"'
         podman save -o \"\${PAYLOAD_OCI}\" --format oci-archive '"${PAYLOAD_IMAGE}"'
         podman rm \"\${SQUASH_CTR}\"
@@ -765,7 +771,7 @@ luks-boot-qemu-installed target:
 
 # Send LUKS passphrase to installed QEMU VM via monitor screendump + sendkey.
 # luks-qemu-ssh-port-installed: forwarded SSH port for boot-completion detection
-#   (0 = disabled, use framebuffer fallback only)
+# (0 = disabled, use framebuffer fallback only)
 luks-unlock-qemu target:
     #!/usr/bin/bash
     set -euo pipefail

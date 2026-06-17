@@ -96,8 +96,14 @@ removed from CI.
 
 ## Current status
 
-**Last CI run:** `27685994836` (in progress at time of writing) with
-sha=`417f61d` (ISO) + fisherman `24d15db` (containers-storage transport).
+**Last CI run:** `27687334655` (failed) — bootc found the embedded containers-storage
+image but the squashed image lost its `ostree.final-diffid` annotation.
+
+**Fix applied:** justfile now preserves the `ostree.final-diffid` annotation during
+the `podman commit -s` squashing step.  The annotation is extracted from the original
+image and passed back via `--annotation` when creating the single-layer image.
+
+**Pending:** CI run with annotation preservation fix (push after this handoff).
 
 **Previous failure chain:**
 
