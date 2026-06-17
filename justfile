@@ -180,7 +180,7 @@ iso-sd-boot target:
         echo 'Exporting squashed OCI image to archive...'
         echo '=== Squashing '"${PAYLOAD_IMAGE}"' to single layer (avoids VFS explosion) ==='
         # Preserve ostree.final-diffid annotation for bootc ostree installs
-        OSTREE_DIFFID=\$(podman image inspect "\${PAYLOAD_IMAGE}" --format '{{ "{{" }}index .Annotations "ostree.final-diffid"{{ "}}" }}' 2>/dev/null || true)
+        OSTREE_DIFFID=\$(podman image inspect "${PAYLOAD_IMAGE}" --format '{{ "{{" }}index .Annotations "ostree.final-diffid"{{ "}}" }}' 2>/dev/null || true)
         SQUASH_CTR=\$(podman create --entrypoint '["/bin/true"]' --pull=never '"${PAYLOAD_IMAGE}"')
         if [ -n "\${OSTREE_DIFFID}" ]; then
             podman commit -s --annotation ostree.final-diffid="\${OSTREE_DIFFID}" "\${SQUASH_CTR}" squash-temp-image
