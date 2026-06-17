@@ -676,7 +676,7 @@ luks-install-qemu target:
     # to-filesystem` natively on the live ISO (which IS the Bluefin image).
     # No podman, no OCI export, no overlay, no RAM issues.
     # target_imgref tells bootc what to track for day-2 updates.
-    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "",\n  "target_imgref": "%s",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
+    printf '{\n  "disk": "%s",\n  "filesystem": "%s",\n  "image": "",\n  "targetImgref": "%s",\n  "composeFsBackend": false,\n  "bootloader": "grub2",\n  "hostname": "bluefin-luks-test",\n  "encryption": {"type": "luks-passphrase", "passphrase": "%s"},\n  "flatpaks": []\n}\n' \
         "${DISK}" "${FILESYSTEM}" "${PAYLOAD_IMAGE}" "${PASSPHRASE}" > "${RECIPE_TMP}"
     $SCP "${RECIPE_TMP}" liveuser@127.0.0.1:/tmp/luks-recipe.json
 
