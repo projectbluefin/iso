@@ -342,16 +342,13 @@ echo 'f /etc/hostname 0644 - - - bluefin-live' > /usr/lib/tmpfiles.d/live-hostna
 
 # ── Container storage ────────────────────────────────────────────────────────
 # Use overlay driver for space-efficient container operations.
-# The embedded OCI in the squashfs is a pre-built overlay-format store at
-# /usr/lib/containers/storage.  The live ISO rootfs is itself an overlayfs
-# (squashfs lower + tmpfs upper).  Using overlay as the primary graph driver
-# fails on kernels without overlay-on-overlay support (e.g. CentOS Stream 10
-# in bluefin-lts).  VFS is fine here — the primary store is empty; bootc reads
-# the image from the additional store, which is readable regardless of the
-# primary driver.
+# The embedded OCI in the squashfs is available via skopeo/podman pull
+# from the registry.  Overlay avoids VFS's full-image copy per layer.
+# fuse-overlayfs (installed in Containerfile) handles overlay-on-overlay
+# on kernels without native support (e.g. CentOS Stream 10 in bluefin-lts).
 cat > /etc/containers/storage.conf << 'STOREOF'
 [storage]
-driver = "vfs"
+driver = "overlay"
 runroot = "/run/containers/storage"
 graphroot = "/var/lib/containers/storage"
 

@@ -72,7 +72,10 @@ ARG FILESYSTEM=btrfs
 # Install systemd-boot for the live ISO ESP (Bluefin ships GRUB2 for the
 # installed system, but the live ISO needs a UEFI bootloader on the ESP image).
 # systemd-boot-unsigned is the Fedora package; use rpm-ostree to layer it.
-RUN rpm-ostree install --apply-live --allow-inactive systemd-boot-unsigned \
+# fuse-overlayfs provides overlay-on-overlay for kernels without native support
+# (e.g. CentOS Stream 10 in bluefin-lts — containers/storage needs it on
+# overlayfs-based rootfs).
+RUN rpm-ostree install --apply-live --allow-inactive systemd-boot-unsigned fuse-overlayfs \
     && rm -rf /var/cache/rpm-ostree
 
 # Replace the OCI-mode initramfs with the dmsquash-live initramfs from stage 2
