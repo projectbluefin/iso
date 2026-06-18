@@ -174,7 +174,7 @@ iso-sd-boot target:
         SQUASHFS_STORAGE=\"\${CS_STAGING}/usr/lib/containers/storage\"
         STORAGE_CONF=\"\$(mktemp '${OUTPUT_DIR}'/live-storage-XXXXXX.conf)\"
         mkdir -p \"\${SQUASHFS_STORAGE}\"
-        printf '[storage]\ndriver = \"overlay\"\nrunroot = \"/tmp/cs-runroot\"\ngraphroot = \"/vfs-storage\"\n' \
+        printf '[storage]\ndriver = \"vfs\"\nrunroot = \"/tmp/cs-runroot\"\ngraphroot = \"/vfs-storage\"\n' \
             > \"\${STORAGE_CONF}\"
 
         podman save -o \"\${PAYLOAD_OCI}\" --format oci-archive '"${PAYLOAD_IMAGE}"'
