@@ -96,26 +96,25 @@ removed from CI.
 
 ## Current status
 
-**Last proven success:** run `27685994836` — ALL 4 matrix jobs PASSED
-with `--source-imgref docker://ghcr.io/ublue-os/bluefin:stable` (docker:// transport)
-+bootcDirect at 8 GB VM RAM.  The live ISO VM has NAT networking via QEMU
-`-netdev user` so docker:// pulls work in CI.
+**✅ NEW: offline-capable path working** — run `27702412035`: bluefin + bluefin-stable PASSED
+with `--source-imgref containers-storage:ghcr.io/ublue-os/bluefin:stable` (containers-storage
+transport) + bootcDirect at 8 GB VM RAM.  No squash, no second disk, no podman container,
+no network pull.  The image is read from the embedded squashfs at `/usr/lib/containers/storage`.
 
-**Trade-off:** docker:// requires a registry pull (~4.8 GB) every run.  The
-embedded containers-storage at `/usr/lib/containers/storage` is bypassed.
-This is fine for CI but defeats offline-install capability.
+**Bluefin-lts:** pre-existing dracut build failure (kernel `6.12.0-228.el10` in Debian
+initramfs-builder) — unrelated to LUKS test changes.
 
-**Current attempt:** `containers-storage:` transport + `ostree.final-diffid`
-annotation fix.  CI run `27689531404` in progress.
+**Key insight that made it work:** removing the `podman commit -s` squashing step.
+The squashing was added for VFS memory pressure (commit `3b8322b`), but the
+containers-storage import now uses overlay driver.  Without squashing, ostree
+annotations (`ostree.final-diffid`) survive into the embedded store, and bootc
+resolves them correctly.
 
-**What's blocking `containers-storage:`:** the ISO build squashes the image
-to a single layer via `podman commit -s`, which strips ostree annotations.
-The justfile now preserves `ostree.final-diffid` during squashing.
+**Fisherman fork needed:** upstream tuna-os/fisherman lacks the `--source-imgref`
+emission for direct mode.  The essential patch is ~10 lines in `BuildBootcArgs`.
+See PR to upstream.
 
-**Fallback if `containers-storage:` fails:** stick with `docker://` transport
-(docker:// is proven working, just slower for CI).
-
-**Previous failure chain:**
+**Previous failure chain (resolved):**
 
 | CI Run | ISO Commit | Fisherman Commit | Failure |
 |--------|-----------|-----------------|---------|
@@ -153,10 +152,21 @@ The justfile now preserves `ostree.final-diffid` during squashing.
 
 ## Open questions
 
-1. **Does `--source-imgref containers-storage:ghcr.io/ublue-os/bluefin:stable` work** with bootcDirect on the live ISO?  The image IS embedded in the ISO's `/usr/lib/containers/storage` (additionalimagestores), and the driver format is overlay (not VFS).  This is the current CI run.
+1. ~~Does `--source-imgref containers-storage:ghcr.io/ublue-os/bluefin:stable` work~~
+   **RESOLVED** — works with bootcDirect at 8 GB when squashing is removed.
 
-2. **Is 8 GB enough for ostree bootcDirect?**  If bootcDirect avoids podman's overhead (no container runtime), 8 GB should be sufficient.  If not, bump to 12 GB.
+2. ~~Is 8 GB enough for ostree bootcDirect?~~ **RESOLVED** — 8 GB is sufficient.
+   bootcDirect avoids podman's container runtime overhead entirely.
 
-3. **Should the container-mode overlay/OCI patches be dropped?**  If bootcDirect works, commits `1b70f55` through `fe42607` in the fisherman fork are dead code.  The branch should be rebased to only include the direct-mode changes + the test additions.
+3. **Cleanup dead patches** — commits `1b70f55` through `ea7987b` in the fisherman
+   fork (overlay/OCI container-mode patches) should be removed from the branch.
+   Only the direct-mode `--source-imgref` change + `bareImageRef` fix + tests are
+   needed.
 
-4. **bluefin-lts fails with a dracut build error** in the Containerfile (kernel module version mismatch on the LTS kernel).  Unrelated to the LUKS test changes.
+4. **Upstream fisherman fix** — the ~10-line `--source-imgref` change in
+   `BuildBootcArgs` should be submitted as a PR to tuna-os/fisherman.
+   Once merged, the forked binary build step can be removed from CI.
+
+5. **bluefin-lts dracut failure** — kernel `6.12.0-228.el10` in the Debian
+   initramfs-builder causes dracut to fail.  Unrelated to LUKS test changes.
+   Needs a separate Containerfile fix (different dracut version or kernel path).
