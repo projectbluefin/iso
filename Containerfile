@@ -44,9 +44,11 @@ COPY src/dracut/95bluefin-isofile /usr/lib/dracut/modules.d/95bluefin-isofile
 RUN set -ex; \
     kernel=$(ls /usr/lib/modules | sort -V | tail -1); \
     echo "Building dmsquash-live initramfs for kernel ${kernel}"; \
+    # Check which optional drivers are available (el10 kernel may lack ntfs3).
+    NTFS3=""; test -f "/usr/lib/modules/${kernel}/kernel/fs/ntfs3/ntfs3.ko" && NTFS3="ntfs3"; \
     DRACUT_NO_XATTR=1 dracut -v --force --zstd --reproducible --no-hostonly \
         --add "dmsquash-live bluefin-isofile" \
-        --add-drivers "squashfs overlay loop iso9660 sr_mod cdrom sd_mod usb-storage xhci-pci exfat vfat fat ntfs3 ext4" \
+        --add-drivers "squashfs overlay loop iso9660 sr_mod cdrom sd_mod usb-storage xhci-pci exfat vfat fat ${NTFS3} ext4" \
         /tmp/initramfs.img "${kernel}"; \
     ls -lh /tmp/initramfs.img
 
