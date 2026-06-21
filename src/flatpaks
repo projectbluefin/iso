@@ -1,0 +1,45 @@
+# Bluefin system flatpaks
+# Installed into the live squashfs at build time (committed to layer, not cache).
+# Copied offline to the target by tuna-installer during installation.
+#
+# Note: org.bootcinstaller.Installer is installed separately via the GitHub
+# Releases bundle (not on Flathub) earlier in build.sh.
+#
+# Format: one app ID per line, resolved from the flathub remote.
+com.github.PintaProject.Pinta
+com.github.tchx84.Flatseal
+com.mattjakeman.ExtensionManager
+com.ranfdev.DistroShelf
+io.github.flattool.Ignition
+io.github.flattool.Warehouse
+io.github.kolunmi.Bazaar
+io.gitlab.adhami3310.Impression
+io.missioncenter.MissionCenter
+it.mijorus.smile
+org.gnome.Calculator
+org.gnome.Calendar
+org.gnome.Characters
+org.gnome.Connections
+org.gnome.Contacts
+org.gnome.DejaDup
+org.gnome.FileRoller
+org.gnome.Firmware
+org.gnome.Logs
+org.gnome.Loupe
+org.gnome.Maps
+org.gnome.NautilusPreviewer
+org.gnome.Papers
+org.gnome.Showtime
+org.gnome.SimpleScan
+org.gnome.Snapshot
+org.gnome.SoundRecorder
+org.gnome.TextEditor
+org.gnome.Weather
+org.gnome.baobab
+org.gnome.clocks
+org.gnome.font-viewer
+org.gtk.Gtk3theme.adw-gtk3
+org.gtk.Gtk3theme.adw-gtk3-dark
+org.mozilla.Thunderbird
+org.mozilla.firefox
+page.tesk.Refine
