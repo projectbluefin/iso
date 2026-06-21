@@ -76,7 +76,7 @@ jobs:
       - name: Clone patched fisherman
         run: |
           git clone https://github.com/projectbluefin/fisherman.git \
-            --branch fix/direct-mode-source-imgref \
+            --branch dev \
             --depth 1 \
             /tmp/fisherman
 
