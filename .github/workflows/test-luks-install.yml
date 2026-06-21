@@ -76,7 +76,7 @@ jobs:
       - name: Clone patched fisherman
         run: |
           git clone https://github.com/projectbluefin/fisherman.git \
-            --branch fix/overlay-driver-for-ostree-bootc-install \
+            --branch fix/direct-mode-source-imgref \
             --depth 1 \
             /tmp/fisherman
 
