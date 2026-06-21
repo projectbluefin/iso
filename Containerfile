@@ -19,7 +19,7 @@
 
 # Base image — override to build bluefin-lts or other variants.
 # Example: podman build --build-arg BASE_IMAGE=ghcr.io/ublue-os/bluefin-lts:latest ...
-ARG BASE_IMAGE=ghcr.io/ublue-os/bluefin:stable
+ARG BASE_IMAGE=ghcr.io/ublue-os/bluefin:stable@sha256:742dfe52ce1deeacbb7b44b87366037ed7f1fb4e47707a3eb6198730678c07cf
 
 # ── Stage 1: Bluefin reference (kernel modules source) ───────────────────────
 FROM ${BASE_IMAGE} AS bluefin-ref
@@ -27,7 +27,7 @@ FROM ${BASE_IMAGE} AS bluefin-ref
 # ── Stage 2: Debian — builds the dmsquash-live initramfs ─────────────────────
 # Dracut runs natively in Debian against Bluefin's kernel modules.
 # Only /tmp/initramfs.img crosses into the final stage.
-FROM debian:sid AS initramfs-builder
+FROM debian:sid@sha256:d4b76cd3c767e81dbbeb88e1c252c85275c3fba518ad7d17a42c9eb0b6b5b9bb AS initramfs-builder
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
