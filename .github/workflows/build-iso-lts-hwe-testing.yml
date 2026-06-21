@@ -1,0 +1,34 @@
+---
+name: Build LTS-HWE Testing ISOs
+# This is the ONLY authorized workflow for building lts-hwe-testing ISOs.
+# Testing tags (lts-hwe-testing) must NOT be used in build-iso-lts-hwe.yml or
+# build-iso-all.yml — those workflows are for production tags only.
+# Note: choice-input removal enforces this at the UI/CLI level; direct API
+# callers must follow this policy by convention.
+# Builds: 2 LTS-HWE testing ISOs
+#   - amd64 x main
+#   - arm64 x main
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload ISOs as job artifacts'
+        type: boolean
+        default: false
+      upload_r2:
+        description: 'Upload ISOs to Cloudflare R2'
+        type: boolean
+        default: true
+  schedule:
+    - cron: '17 6 * * 1'  # Every Monday at 06:17 UTC
+
+jobs:
+  build-iso-lts-hwe-testing:
+    name: Build LTS-HWE Testing ISOs
+    uses: ./.github/workflows/reusable-build-iso-anaconda.yml
+    secrets: inherit
+    with:
+      image_version: lts-hwe
+      image_tag: lts-hwe-testing
+      upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
+      upload_r2: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_r2 }}
