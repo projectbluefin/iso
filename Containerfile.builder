@@ -11,7 +11,7 @@
 #
 # All tools run in their native Debian environment; no cross-distro binary
 # grafting required.
-FROM debian:sid
+FROM debian:sid@sha256:d4b76cd3c767e81dbbeb88e1c252c85275c3fba518ad7d17a42c9eb0b6b5b9bb
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
