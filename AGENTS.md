@@ -10,6 +10,23 @@ CloudFlare R2.
 workflow. This repo is designed to be forked by other projects; see
 "Adapting for Downstream Forks" below.
 
+## Self-Improvement
+
+Every session must ship the work and update the relevant skill file in
+`docs/skills/`. Same PR. Not a follow-up.
+
+Banned:
+- No changelog files. Delete `IMPROVEMENTS.md`, `CHANGELOG.md`, `SESSION.md`, and
+  similar files if they appear.
+- No session notes committed to the repository. Keep session state in the agent
+  session folder only.
+- No "append here" docs. Route learning to `docs/skills/<file>.md` instead.
+
+Before marking work done:
+- [ ] Discovered a workaround, pattern, or convention?
+- [ ] Skill file updated (or created)?
+- [ ] Same PR as the implementation?
+
 ---
 
 ## ⚠️ LTS ISO Status: DISABLED — DO NOT TOUCH PRODUCTION

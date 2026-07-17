@@ -1,0 +1,87 @@
+name: Skill Drift
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  skill-drift:
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Detect implementation changes without skill updates
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${BASE_SHA:-}" ]]; then
+            echo "::warning::Could not determine the PR base SHA; skipping skill-drift check."
+            exit 0
+          fi
+
+          git fetch origin "${BASE_SHA}" --depth=1 >/dev/null 2>&1 || true
+          git fetch origin "${HEAD_SHA}" --depth=1 >/dev/null 2>&1 || true
+
+          changed_files="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+
+          python - <<'PY'
+          import fnmatch
+          import os
+          import subprocess
+          import sys
+
+          changed_files = subprocess.check_output(
+              ["git", "diff", "--name-only", os.environ["BASE_SHA"], os.environ["HEAD_SHA"]],
+              text=True,
+          ).splitlines()
+
+          code_patterns = [
+              ".github/workflows/**",
+              "hack/**",
+              "iso_files/**",
+              "just/**",
+              "Justfile",
+          ]
+          skill_patterns = [
+              "docs/skills/**",
+              "docs/**/*.md",
+              "AGENTS.md",
+              "README.md",
+          ]
+
+          def matches(path, patterns):
+              for pattern in patterns:
+                  if fnmatch.fnmatch(path, pattern) or path.startswith(pattern.rstrip("/")):
+                      return True
+              return False
+
+          code_changes = [path for path in changed_files if matches(path, code_patterns)]
+          skill_changes = [path for path in changed_files if matches(path, skill_patterns)]
+
+          if not code_changes:
+              print("No implementation files changed; skipping skill-drift check.")
+              sys.exit(0)
+
+          if skill_changes:
+              print("Skill documentation updated alongside implementation changes.")
+              sys.exit(0)
+
+          print("::warning::Implementation changed without a matching skill update.")
+          print("Changed implementation files:")
+          for path in code_changes:
+              print(f"  - {path}")
+          print("Add or update a file under docs/skills/ or AGENTS.md to document the change.")
+          PY
