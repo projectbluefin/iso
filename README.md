@@ -344,6 +344,16 @@ The `promote-iso.yml` workflow allows controlled promotion of ISOs from testing 
 # 6. Announce availability to users
 ```
 
+## Agent workflow and skills
+
+Agent-facing guidance lives in `docs/skills/`:
+
+- `docs/skills/lifecycle.md` covers issue triage, PR handling, release work, and session closeout.
+- `docs/skills/workflow-map.md` covers the workflow topology, prerelease flow, and promotion guardrails.
+- `docs/skills/skill-improvement.md` explains the self-improvement loop and when to write a skill update.
+
+Keep implementation changes and the associated skill update in the same PR.
+
 ## Contributing
 
 Contributions are welcome! Please ensure:

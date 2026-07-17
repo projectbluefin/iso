@@ -27,6 +27,14 @@ Before marking work done:
 - [ ] Skill file updated (or created)?
 - [ ] Same PR as the implementation?
 
+## Lifecycle and skills
+
+- Read `docs/skills/INDEX.md` before starting work in this repository.
+- Use `docs/skills/lifecycle.md` when the task involves issue triage, PR handling, release work, or session closeout.
+- Use `docs/skills/workflow-map.md` when the task involves workflow topology, prerelease behavior, or promotion safety.
+- Keep implementation and learning updates together in the same PR.
+- End the session with the end-session skill and leave the repo in a state a fresh agent can pick up.
+
 ---
 
 ## ⚠️ LTS ISO Status: DISABLED — DO NOT TOUCH PRODUCTION

@@ -24,6 +24,7 @@ Do not use this skill for one-off operational notes, obvious commands, or epheme
 2. Update or create the closest matching skill file under `docs/skills/`.
 3. Keep the skill update in the same PR as the implementation.
 4. Before closing the session, confirm the work and the learning were both shipped.
+5. If the task touched issue/PR/release flow, also check the repo lifecycle guidance in `docs/skills/lifecycle.md` and make sure the session closes with the relevant handoff.
 
 ## Common Rationalizations
 
