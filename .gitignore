@@ -1,5 +1,6 @@
 # OpenCode
 .opencode/
+.worktrees/
 
 # Build artifacts
 *_build*/
