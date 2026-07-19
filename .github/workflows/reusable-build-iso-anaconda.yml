@@ -32,7 +32,7 @@ name: Reusable Build
       - "iso_files/configure_iso_anaconda.sh"
 
 env:
-  IMAGE_REGISTRY: "ghcr.io/projectbluefin"
+  IMAGE_REGISTRY: "ghcr.io/ublue-os"
   IMAGE_NAME: "bluefin"
 
 jobs:
