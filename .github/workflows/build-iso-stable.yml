@@ -7,6 +7,13 @@ name: Build Stable ISOs
 on:
   workflow_dispatch:
     inputs:
+      image_tag:
+        description: 'Stable image tag to build from'
+        type: choice
+        options:
+          - stable
+          - testing
+        default: stable
       upload_artifacts:
         description: 'Upload ISOs as job artifacts'
         type: boolean
@@ -25,6 +32,6 @@ jobs:
     secrets: inherit
     with:
       image_version: stable  # Strictly builds Stable ISOs only
-      image_tag: stable
+      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || 'stable' }}
       upload_artifacts: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_artifacts || false }}
       upload_r2: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_r2 || true }}
