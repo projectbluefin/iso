@@ -596,6 +596,11 @@ build-iso $image="bluefin" $tag="latest" $flavor="main" ghcr="0" pipeline="0":
 build-iso-ghcr image="bluefin" tag="latest" flavor="main":
     @{{ just }} build-iso {{ image }} {{ tag }} {{ flavor }} 1
 
+# Run the complete local ISO test suite (boot smoke + unattended install)
+[group('ISO')]
+test-iso iso_path output_directory="iso-test-output":
+    bash tests/iso/suite.sh "{{ iso_path }}" "{{ output_directory }}"
+
 # Run ISO
 [group('ISO')]
 run-iso $image="bluefin" $tag="latest" $flavor="main":

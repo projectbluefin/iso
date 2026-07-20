@@ -24,5 +24,25 @@ jobs:
       image_version: stable
       image_tag: stable
       upload_r2: false
-      upload_artifacts: false
+      upload_artifacts: true
+    secrets: inherit
+
+  test-stable-main:
+    name: Stable main ISO E2E
+    needs: build-iso-stable
+    uses: ./.github/workflows/iso-e2e-test.yml
+    with:
+      source_run_id: ${{ github.run_id }}
+      artifact_name: iso-${{ github.run_id }}-stable-main-amd64
+      variant: stable
+    secrets: inherit
+
+  test-stable-nvidia:
+    name: Stable NVIDIA ISO E2E
+    needs: build-iso-stable
+    uses: ./.github/workflows/iso-e2e-test.yml
+    with:
+      source_run_id: ${{ github.run_id }}
+      artifact_name: iso-${{ github.run_id }}-stable-nvidia-open-amd64
+      variant: stable
     secrets: inherit
