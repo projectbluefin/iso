@@ -120,6 +120,11 @@ fi
 
 
 
+# Titanoboa uses which(), which requires Just's current `set lists` mode.
+if ! grep -qx 'set lists' "$BUILD_DIR/Justfile"; then
+    sed -i '1i set lists' "$BUILD_DIR/Justfile"
+fi
+
 # Patch Titanoboa Justfile to ignore SELinux xattr errors on container-backed filesystems.
 echo "Patching Titanoboa Justfile to ignore SELinux xattr errors..."
 sed -i -E '/^[[:space:]]+setfiles / s/$/ || true/; /^[[:space:]]+chcon / s/$/ || true/' "$BUILD_DIR/Justfile"
