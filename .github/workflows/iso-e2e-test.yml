@@ -89,7 +89,6 @@ jobs:
           DISPATCH_ISO_URL: ${{ github.event.client_payload.iso_url }}
           DISPATCH_SOURCE_RUN_ID: ${{ github.event.client_payload.source_run_id }}
           DISPATCH_ISO_PATH: ${{ github.event.client_payload.iso_path }}
-        env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
