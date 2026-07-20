@@ -28,7 +28,7 @@ permissions:
 jobs:
   validate:
     name: Validate ISO through projectbluefin/testsuite
-    uses: projectbluefin/testsuite/.github/workflows/iso-validation.yml@3d4d65356f3dc8842ba84f142014e1d6fbf0237d
+    uses: projectbluefin/testsuite/.github/workflows/iso-validation.yml@2c1d781353f68f060729f5af02917062f9a7f50b
     with:
       iso_url: ${{ inputs.iso_url }}
       iso_ref: ${{ inputs.iso_ref }}
