@@ -124,6 +124,11 @@ fi
 if ! grep -qx 'set lists' "$BUILD_DIR/Justfile"; then
     sed -i '1i set lists' "$BUILD_DIR/Justfile"
 fi
+# The lab runs this build inside a privileged pod; allow Titanoboa's nested
+# builder instead of rejecting the outer lab container.
+if grep -q 'systemd-detect-virt -c' "$BUILD_DIR/Justfile"; then
+    sed -i -E '/systemd-detect-virt -c/ c\\        echo "Skipping nested-container guard"' "$BUILD_DIR/Justfile"
+fi
 
 # Patch Titanoboa Justfile to ignore SELinux xattr errors on container-backed filesystems.
 echo "Patching Titanoboa Justfile to ignore SELinux xattr errors..."
