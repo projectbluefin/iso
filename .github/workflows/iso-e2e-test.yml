@@ -1,0 +1,145 @@
+name: ISO E2E Test
+
+run-name: >-
+  ISO E2E validation for ${{ github.event.client_payload.release_tag || inputs.release_tag || 'manual' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      iso_url:
+        description: 'HTTPS URL for the ISO to test'
+        required: false
+        type: string
+      source_run_id:
+        description: 'Workflow run ID containing an ISO artifact'
+        required: false
+        type: string
+      artifact_name:
+        description: 'Optional ISO artifact name from source_run_id'
+        required: false
+        type: string
+      iso_path:
+        description: 'Path to a checked-in ISO in this repository'
+        required: false
+        type: string
+      release_tag:
+        description: 'Release tag used for this E2E run'
+        required: false
+        type: string
+      variant:
+        description: 'Variant being validated'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      iso_url:
+        description: 'HTTPS URL for the ISO to test'
+        required: false
+        type: string
+        default: ''
+      source_run_id:
+        description: 'Workflow run ID containing an ISO artifact'
+        required: false
+        type: string
+        default: ''
+      artifact_name:
+        description: 'Optional ISO artifact name from source_run_id'
+        required: false
+        type: string
+        default: ''
+      iso_path:
+        description: 'Path to an ISO available after checkout'
+        required: false
+        type: string
+        default: ''
+      release_tag:
+        description: 'Release tag used for this E2E run'
+        required: false
+        type: string
+        default: ''
+      variant:
+        description: 'Variant being validated'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes qemu-system-x86 qemu-utils xorriso ffmpeg
+
+      - name: Resolve ISO input
+        id: context
+        env:
+          INPUT_ISO_URL: ${{ inputs.iso_url }}
+          INPUT_SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          INPUT_ISO_PATH: ${{ inputs.iso_path }}
+          DISPATCH_ISO_URL: ${{ github.event.client_payload.iso_url }}
+          DISPATCH_SOURCE_RUN_ID: ${{ github.event.client_payload.source_run_id }}
+          DISPATCH_ISO_PATH: ${{ github.event.client_payload.iso_path }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          iso_url="${DISPATCH_ISO_URL:-${INPUT_ISO_URL}}"
+          source_run_id="${DISPATCH_SOURCE_RUN_ID:-${INPUT_SOURCE_RUN_ID}}"
+          iso_path="${DISPATCH_ISO_PATH:-${INPUT_ISO_PATH}}"
+          if [[ -n "$iso_url" ]]; then
+            mkdir -p e2e-input
+            curl --fail --location --retry 3 --retry-all-errors --output e2e-input/source.iso "$iso_url"
+            iso_path="$PWD/e2e-input/source.iso"
+          elif [[ -n "$source_run_id" ]]; then
+            mkdir -p e2e-input
+            artifact_name="${{ github.event.client_payload.artifact_name || inputs.artifact_name || '' }}"
+            if [[ -n "$artifact_name" ]]; then
+              gh run download "$source_run_id" --name "$artifact_name" --dir e2e-input
+            else
+              gh run download "$source_run_id" --pattern "iso-${source_run_id}-*" --dir e2e-input
+            fi
+            shopt -s nullglob
+            matches=(e2e-input/**/*.iso e2e-input/*.iso)
+            if [[ ${#matches[@]} -eq 0 ]]; then
+              echo "No ISO artifact found in workflow run: $source_run_id" >&2
+              exit 1
+            fi
+            iso_path="$(realpath "${matches[0]}")"
+          elif [[ -n "$iso_path" ]]; then
+            [[ -f "$iso_path" ]] || { echo "ISO path does not exist: $iso_path" >&2; exit 1; }
+            iso_path="$(realpath "$iso_path")"
+          else
+            shopt -s nullglob
+            matches=(./*.iso)
+            if [[ ${#matches[@]} -eq 0 ]]; then
+              echo "No ISO file found in the repository checkout" >&2
+              exit 1
+            fi
+            iso_path="$(realpath "${matches[0]}")"
+          fi
+          echo "iso_path=${iso_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Run the e2e harness
+        env:
+          IMAGE_REF: ghcr.io/ublue-os/bluefin
+          IMAGE_TAG: stable
+        run: |
+          bash hack/iso-e2e-test.sh "${{ steps.context.outputs.iso_path }}" e2e-output
+
+      - name: Upload e2e proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-e2e-proof-${{ github.run_id }}
+          if-no-files-found: error
+          path: e2e-output/
