@@ -102,7 +102,7 @@ jobs:
 
           # Compact the JSON and output it
           compact_matrix=$(echo "$matrix" | jq -c .)
-          echo "matrix=$compact_matrix" >> $GITHUB_OUTPUT
+          echo "matrix=$compact_matrix" >> "${GITHUB_OUTPUT}"
           echo "Generated matrix:"
           echo "$matrix" | jq .
 
@@ -128,12 +128,12 @@ jobs:
             podman
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           submodules: recursive
 
       - name: Setup Just
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
 
       - name: Check Just Syntax
         shell: bash
@@ -152,9 +152,11 @@ jobs:
           effective_tag="${{ inputs.image_tag || matrix.image_version }}"
           artifact_format="$image_name-${effective_tag}-$(uname -m)"
           KARGS="NONE"
-          echo "image_ref=$image_ref" >> "${GITHUB_OUTPUT}"
-          echo "artifact_format=$artifact_format" >> "${GITHUB_OUTPUT}"
-          echo "kargs=$KARGS" >> "${GITHUB_OUTPUT}"
+          {
+            echo "image_ref=$image_ref"
+            echo "artifact_format=$artifact_format"
+            echo "kargs=$KARGS"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Generate titanoboa-compatible file list
         id: flatpak_list
@@ -187,7 +189,7 @@ jobs:
             HOOK_post_rootfs="${HOOK_POST_ROOTFS}" \
             TITANOBOA_BUILDER_DISTRO="${BUILDER_DISTRO}" \
             "${just_bin}" -f "${titanoboa_dir}/Justfile" build \
-            "${IMAGE_REF}" 1 "${FLATPAKS_LIST}" squashfs NONE '' 1
+            "${IMAGE_REF}" 1 "${FLATPAKS_LIST}" squashfs NONE "${IMAGE_REF}" 1
           sudo chown "$(id -u):$(id -g)" "${titanoboa_dir}/output.iso"
           mv "${titanoboa_dir}/output.iso" output.iso
 
@@ -198,12 +200,32 @@ jobs:
           FLAVOR: ${{ matrix.flavor }}
           OUTPUT_NAME: ${{ steps.image_ref.outputs.artifact_format }}
           IMAGE_VERSION: ${{ matrix.image_version }}
+          IMAGE_REF: ${{ steps.image_ref.outputs.image_ref }}
+          IMAGE_REGISTRY: ${{ env.IMAGE_REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -x
           mkdir -p output
           OUTPUT_DIRECTORY="$(realpath output)"
           mv "${OUTPUT_PATH}" "${OUTPUT_DIRECTORY}/${OUTPUT_NAME}.iso"
           (cd "${OUTPUT_DIRECTORY}" && sha256sum "${OUTPUT_NAME}.iso" | tee "${OUTPUT_NAME}.iso-CHECKSUM")
+          iso_sha256="$(awk '{print $1}' "${OUTPUT_DIRECTORY}/${OUTPUT_NAME}.iso-CHECKSUM")"
+          cat > "${OUTPUT_DIRECTORY}/${OUTPUT_NAME}.manifest.json" <<EOF
+          {
+            "candidate_id": "${GITHUB_RUN_ID}-${OUTPUT_NAME}",
+            "source_repo": "${GITHUB_REPOSITORY}",
+            "source_sha": "${GITHUB_SHA}",
+            "source_run_id": "${GITHUB_RUN_ID}",
+            "variant": "${IMAGE_VERSION}",
+            "flavor": "${FLAVOR}",
+            "platform": "${PLATFORM:-$(uname -m)}",
+            "image_ref": "${IMAGE_REF:-${IMAGE_REGISTRY}/${IMAGE_NAME}}",
+            "image_tag": "${{ inputs.image_tag || matrix.image_version }}",
+            "iso_filename": "${OUTPUT_NAME}.iso",
+            "iso_sha256": "${iso_sha256}"
+          }
+          EOF
           echo "output_directory=$OUTPUT_DIRECTORY" >> "${GITHUB_OUTPUT}"
 
       - name: Generate Torrent File
@@ -240,6 +262,15 @@ jobs:
             "${OUTPUT_NAME}.iso"
 
           sha256sum "${OUTPUT_NAME}.iso.torrent" | tee "${OUTPUT_NAME}.iso.torrent-CHECKSUM"
+
+      - name: Upload ISO Artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: iso-${{ github.run_id }}-${{ matrix.image_version }}-${{ matrix.flavor }}-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            ${{ steps.rename.outputs.output_directory }}/${{ steps.image_ref.outputs.artifact_format }}.iso
+            ${{ steps.rename.outputs.output_directory }}/${{ steps.image_ref.outputs.artifact_format }}.manifest.json
 
       - name: Upload Run Torrent Artifacts
         if: inputs.upload_r2 && github.event_name != 'pull_request'
@@ -293,6 +324,8 @@ jobs:
   create-prerelease:
     name: Create GitHub Prerelease
     needs: build
+    outputs:
+      release_tag: ${{ steps.version.outputs.version }}
     # Run when builds complete (success or partial failure) — skip only on cancellation.
     # This ensures a prerelease is published even when arm64 builds fail, so
     # the amd64 ISOs that succeeded are still available on the releases page.
@@ -306,7 +339,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Download Current Run Torrent Artifacts
         env:
@@ -366,7 +399,7 @@ jobs:
             VERSION="${YEAR_MONTH}"
           fi
 
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
       - name: Build Platform Status
         id: build_status
@@ -436,6 +469,7 @@ jobs:
           fi
 
           NOTES_FILE="${RUNNER_TEMP}/prerelease-notes.md"
+          fence='```'
           {
             printf '%s\n' '## ⚠️ Prerelease - Testing Builds'
             printf '\n'
@@ -449,7 +483,7 @@ jobs:
             cat "${BUILD_STATUS_FILE}"
             printf '%s\n' '### How to Download'
             printf '\n'
-            printf '%s\n' '1. Download a `.torrent` file below'
+            printf '%s\n' "1. Download a \`.torrent\` file below"
             printf '%s\n' '2. Open with a BitTorrent client (qBittorrent, Transmission, etc.)'
             printf '%s\n' '3. Torrents include web seeds -- downloads work immediately'
             printf '\n'
@@ -459,17 +493,17 @@ jobs:
             printf '\n'
             printf '%s\n' '### Verify'
             printf '\n'
-            printf '%s\n' 'Verify your ISO download using the `.iso-CHECKSUM` files attached to this release:'
+            printf '%s\n' "Verify your ISO download using the \`.iso-CHECKSUM\` files attached to this release:"
             printf '\n'
-            printf '%s\n' '```bash'
+            printf '%s\n' "${fence}bash"
             printf '%s\n' 'sha256sum -c <filename>.iso-CHECKSUM'
-            printf '%s\n' '```'
+            printf '%s\n' "${fence}"
             printf '\n'
-            printf '%s\n' 'Verify a downloaded torrent file using the `.torrent-CHECKSUM` files:'
+            printf '%s\n' "Verify a downloaded torrent file using the \`.torrent-CHECKSUM\` files:"
             printf '\n'
-            printf '%s\n' '```bash'
+            printf '%s\n' "${fence}bash"
             printf '%s\n' 'sha256sum -c <filename>.iso.torrent-CHECKSUM'
-            printf '%s\n' '```'
+            printf '%s\n' "${fence}"
           } > "${NOTES_FILE}"
 
           gh release create "${VERSION}" \
@@ -478,3 +512,26 @@ jobs:
             --notes-file "${NOTES_FILE}" \
             "${TORRENT_FILES[@]}" \
             "${CHECKSUM_FILES[@]}"
+
+  trigger-smoke-validation:
+    name: Trigger ISO Smoke Validation
+    needs: create-prerelease
+    if: needs.create-prerelease.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Dispatch repo-local smoke validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.create-prerelease.outputs.release_tag }}
+          VARIANT: ${{ inputs.image_version }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
+            --raw-field event_type=iso-smoke-validation \
+            -f "client_payload[release_tag]=${RELEASE_TAG}" \
+            -f "client_payload[variant]=${VARIANT}" \
+            -f "client_payload[source_run_id]=${SOURCE_RUN_ID}"
