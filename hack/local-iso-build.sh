@@ -120,9 +120,9 @@ fi
 
 
 
-# Patch Titanoboa Justfile to ignore setfiles errors (workaround for smartmontools/FS issues)
-echo "Patching Titanoboa Justfile to ignore setfiles errors..."
-sed -i 's/setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_contexts ./setfiles -F -r . \/etc\/selinux\/targeted\/contexts\/files\/file_contexts . || true/' "$BUILD_DIR/Justfile"
+# Patch Titanoboa Justfile to ignore SELinux xattr errors on container-backed filesystems.
+echo "Patching Titanoboa Justfile to ignore SELinux xattr errors..."
+sed -i -E '/^[[:space:]]+setfiles / s/$/ || true/; /^[[:space:]]+chcon / s/$/ || true/' "$BUILD_DIR/Justfile"
 
 # Patch Titanoboa Justfile to ensure builder has device access (fix loop mount)
 echo "Patching Titanoboa Justfile to add --device /dev/fuse to builder..."

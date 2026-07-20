@@ -133,7 +133,7 @@ jobs:
           IMAGE_REF: ghcr.io/ublue-os/bluefin
           IMAGE_TAG: stable
         run: |
-          bash hack/iso-e2e-test.sh "${{ steps.context.outputs.iso_path }}" e2e-output
+          bash tests/iso/e2e.sh "${{ steps.context.outputs.iso_path }}" e2e-output
 
       - name: Upload e2e proof
         if: always()

@@ -1,0 +1,12 @@
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+network --bootproto=dhcp --device=link --activate
+zerombr
+clearpart --all --initlabel
+autopart --type=plain
+rootpw --plaintext bluefin
+user --name=bluefin --password bluefin --groups=wheel
+bootloader --location=mbr --append="console=ttyS0"
+ostreecontainer --url=__IMAGE_REF__:__IMAGE_TAG__ --transport=containers-storage --no-signature-verification
+reboot

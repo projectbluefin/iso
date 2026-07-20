@@ -1,0 +1,36 @@
+name: ISO Validation via Testsuite
+
+on:
+  workflow_dispatch:
+    inputs:
+      iso_url:
+        description: "HTTPS URL for the ISO to validate"
+        required: true
+        type: string
+      iso_ref:
+        description: "Immutable ISO ref containing tests/iso"
+        required: true
+        type: string
+      variant:
+        description: "ISO variant"
+        required: false
+        default: ""
+        type: string
+      run_e2e:
+        description: "Run unattended installation and post-install boot validation"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate ISO through projectbluefin/testsuite
+    uses: projectbluefin/testsuite/.github/workflows/iso-validation.yml@3d4d65356f3dc8842ba84f142014e1d6fbf0237d
+    with:
+      iso_url: ${{ inputs.iso_url }}
+      iso_ref: ${{ inputs.iso_ref }}
+      variant: ${{ inputs.variant }}
+      run_e2e: ${{ inputs.run_e2e }}

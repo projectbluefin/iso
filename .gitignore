@@ -28,6 +28,11 @@ Thumbs.db
 *.swo
 *~
 
+# Test artifacts
+.e2e-output/
+smoke-output/
+iso-test-output/
+
 # Python
 __pycache__/
 *.py[cod]

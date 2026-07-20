@@ -1,0 +1,213 @@
+name: ISO Smoke Test
+
+run-name: >-
+  ISO smoke validation for ${{ github.event.client_payload.release_tag || inputs.release_tag || 'manual' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      iso_url:
+        description: 'HTTPS URL for the ISO to test'
+        required: false
+        type: string
+      source_run_id:
+        description: 'Workflow run ID containing an ISO artifact'
+        required: false
+        type: string
+      artifact_name:
+        description: 'Optional ISO artifact name from source_run_id'
+        required: false
+        type: string
+      iso_path:
+        description: 'Path to a checked-in ISO in this repository'
+        required: false
+        type: string
+      release_tag:
+        description: 'Release tag used for this smoke run'
+        required: false
+        type: string
+      variant:
+        description: 'Variant being validated'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      iso_url:
+        description: 'HTTPS URL for the ISO to test'
+        required: false
+        type: string
+        default: ''
+      source_run_id:
+        description: 'Workflow run ID containing an ISO artifact'
+        required: false
+        type: string
+        default: ''
+      artifact_name:
+        description: 'Optional ISO artifact name from source_run_id'
+        required: false
+        type: string
+        default: ''
+      iso_path:
+        description: 'Path to an ISO available after checkout'
+        required: false
+        type: string
+        default: ''
+      release_tag:
+        description: 'Release tag used for this smoke run'
+        required: false
+        type: string
+        default: ''
+      variant:
+        description: 'Variant being validated'
+        required: false
+        type: string
+        default: ''
+  repository_dispatch:
+    types:
+      - iso-smoke-validation
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Boot ISO in QEMU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Resolve smoke inputs
+        id: context
+        env:
+          INPUT_ISO_URL: ${{ inputs.iso_url }}
+          INPUT_SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          INPUT_ARTIFACT_NAME: ${{ inputs.artifact_name }}
+          INPUT_ISO_PATH: ${{ inputs.iso_path }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_VARIANT: ${{ inputs.variant }}
+          DISPATCH_ISO_URL: ${{ github.event.client_payload.iso_url }}
+          DISPATCH_SOURCE_RUN_ID: ${{ github.event.client_payload.source_run_id }}
+          DISPATCH_ARTIFACT_NAME: ${{ github.event.client_payload.artifact_name }}
+          DISPATCH_ISO_PATH: ${{ github.event.client_payload.iso_path }}
+          DISPATCH_RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+          DISPATCH_VARIANT: ${{ github.event.client_payload.variant }}
+        run: |
+          set -euo pipefail
+          iso_url="${DISPATCH_ISO_URL:-${INPUT_ISO_URL}}"
+          source_run_id="${DISPATCH_SOURCE_RUN_ID:-${INPUT_SOURCE_RUN_ID}}"
+          artifact_name="${DISPATCH_ARTIFACT_NAME:-${INPUT_ARTIFACT_NAME}}"
+          iso_path="${DISPATCH_ISO_PATH:-${INPUT_ISO_PATH}}"
+          release_tag="${DISPATCH_RELEASE_TAG:-${INPUT_RELEASE_TAG}}"
+          variant="${DISPATCH_VARIANT:-${INPUT_VARIANT}}"
+          {
+            echo "iso_url=${iso_url}"
+            echo "source_run_id=${source_run_id}"
+            echo "artifact_name=${artifact_name}"
+            echo "iso_path=${iso_path}"
+            echo "release_tag=${release_tag}"
+            echo "variant=${variant}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate ISO source
+        env:
+          ISO_URL: ${{ steps.context.outputs.iso_url }}
+          SOURCE_RUN_ID: ${{ steps.context.outputs.source_run_id }}
+          ISO_PATH: ${{ steps.context.outputs.iso_path }}
+        run: |
+          set -euo pipefail
+          source_count=0
+          [[ -n "$ISO_URL" ]] && ((source_count += 1))
+          [[ -n "$SOURCE_RUN_ID" ]] && ((source_count += 1))
+          [[ -n "$ISO_PATH" ]] && ((source_count += 1))
+
+          if [[ "$source_count" -ne 1 ]]; then
+            echo "Provide exactly one of iso_url, source_run_id, or iso_path." >&2
+            exit 1
+          fi
+
+      - name: Download named source artifact
+        if: steps.context.outputs.source_run_id != '' && steps.context.outputs.artifact_name != ''
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.context.outputs.source_run_id }}
+          name: ${{ steps.context.outputs.artifact_name }}
+          path: downloaded-artifact
+
+      - name: Download source run artifacts
+        if: steps.context.outputs.source_run_id != '' && steps.context.outputs.artifact_name == ''
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.context.outputs.source_run_id }}
+          path: downloaded-artifact
+
+      - name: Resolve ISO list
+        id: iso
+        env:
+          ISO_URL: ${{ steps.context.outputs.iso_url }}
+          SOURCE_RUN_ID: ${{ steps.context.outputs.source_run_id }}
+          ISO_PATH: ${{ steps.context.outputs.iso_path }}
+        run: |
+          set -euo pipefail
+          iso_paths=()
+          if [[ -n "$ISO_URL" ]]; then
+            mkdir -p smoke-input
+            curl --fail --location --retry 3 --retry-all-errors \
+              --output smoke-input/source.iso "$ISO_URL"
+            iso_paths+=("$PWD/smoke-input/source.iso")
+          elif [[ -n "$ISO_PATH" ]]; then
+            [[ -f "$ISO_PATH" ]] || { echo "ISO path does not exist: $ISO_PATH" >&2; exit 1; }
+            iso_paths+=("$(realpath "$ISO_PATH")")
+          else
+            mapfile -d '' isos < <(find downloaded-artifact -type f -name '*.iso' -print0 | sort -z)
+            if [[ "${#isos[@]}" -eq 0 ]]; then
+              echo "No ISO files were found in the source artifacts." >&2
+              exit 1
+            fi
+            iso_paths=("${isos[@]}")
+          fi
+
+          iso_list="$RUNNER_TEMP/iso-list.txt"
+          printf '%s\n' "${iso_paths[@]}" > "$iso_list"
+          echo "path=$iso_list" >> "$GITHUB_OUTPUT"
+          echo "count=${#iso_paths[@]}" >> "$GITHUB_OUTPUT"
+
+      - name: Install QEMU and ISO inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes qemu-system-x86 xorriso
+
+      - name: Run boot smoke test
+        id: smoke
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          iso_list="${{ steps.iso.outputs.path }}"
+          status=0
+          while IFS= read -r iso_path; do
+            [[ -n "$iso_path" ]] || continue
+            output_dir="smoke-output/$(basename "${iso_path%.*}")"
+            mkdir -p "$output_dir"
+            if ! tests/iso/smoke.sh "$iso_path" "$output_dir"; then
+              status=1
+            fi
+          done < "$iso_list"
+          exit "$status"
+
+      - name: Upload smoke proof
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: iso-smoke-proof-${{ github.run_id }}
+          if-no-files-found: error
+          path: smoke-output/
+
+      - name: Fail when the smoke test failed
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
