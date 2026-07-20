@@ -26,6 +26,8 @@ name: Reusable Build
         required: false
       R2_ENDPOINT_2025:
         required: false
+      LAB_DISPATCH_TOKEN:
+        required: false
   pull_request:
     paths:
       - ".github/workflows/reusable-build-iso-anaconda.yml"
@@ -512,6 +514,45 @@ jobs:
             --notes-file "${NOTES_FILE}" \
             "${TORRENT_FILES[@]}" \
             "${CHECKSUM_FILES[@]}"
+
+      - name: Dispatch exact candidates to lab
+        if: env.LAB_DISPATCH_TOKEN != ''
+        env:
+          LAB_DISPATCH_TOKEN: ${{ secrets.LAB_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.LAB_DISPATCH_TOKEN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID_2025 }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY_2025 }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_2025 }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          IMAGE_TAG: ${{ inputs.image_tag || inputs.image_version }}
+        run: |
+          set -euo pipefail
+          command -v aws >/dev/null || {
+            sudo apt-get update -y
+            sudo apt-get install -y awscli
+          }
+          shopt -s globstar nullglob
+          checksum_files=(checksums/**/*.iso-CHECKSUM)
+          for checksum_file in "${checksum_files[@]}"; do
+            iso_filename="$(basename "${checksum_file}" -CHECKSUM)"
+            iso_sha256="$(awk '{print $1}' "${checksum_file}")"
+            iso_url="$(AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" \
+              AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+              aws s3 presign "s3://testing/${iso_filename}" \
+                --endpoint-url "${R2_ENDPOINT}" --region auto --expires-in 21600)"
+            jq -n \
+              --arg iso_url "${iso_url}" \
+              --arg iso_sha256 "${iso_sha256}" \
+              --arg source_repo "${SOURCE_REPO}" \
+              --arg source_sha "${SOURCE_SHA}" \
+              --arg candidate_id "${SOURCE_RUN_ID}-${iso_filename}" \
+              --arg image_tag "${IMAGE_TAG}" \
+              '{event_type:"iso-e2e-validation",client_payload:{iso_url:$iso_url,iso_sha256:$iso_sha256,source_repo:$source_repo,source_sha:$source_sha,candidate_id:$candidate_id,image_ref:"ghcr.io/ublue-os/bluefin",image_tag:$image_tag}}' \
+              | gh api --method POST repos/projectbluefin/lab/dispatches --input -
+            echo "Dispatched ${iso_filename} to projectbluefin/lab"
+          done
 
   trigger-smoke-validation:
     name: Trigger ISO Smoke Validation
