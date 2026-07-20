@@ -39,7 +39,7 @@ if [ ! -f "$hook_script" ]; then
     exit 1
 fi
 
-BUILD_DIR="$REPO_ROOT/.build/${variant}-${flavor}"
+BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/.build/${variant}-${flavor}}"
 
 # Construct the image URI
 if [ "$flavor" != "base" ]; then
@@ -145,10 +145,10 @@ cd "$BUILD_DIR"
 # Run the Titanoboa build command
 # Titanoboa needs root podman for loop device access during ISO creation
 echo "Running Titanoboa build..."
-export PODMAN="sudo /usr/bin/podman"
+export PODMAN="${PODMAN:-sudo /usr/bin/podman}"
 TITANOBOA_BUILDER_DISTRO="$IMAGE_DISTRO" \
 	HOOK_post_rootfs="hook.sh" \
-    just PODMAN="sudo /usr/bin/podman" build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
+    just PODMAN="$PODMAN" build "$TARGET_IMAGE_NAME" 1 flatpaks.list || true
 
 echo "Titanoboa build process finished."
 
