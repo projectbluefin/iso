@@ -19,11 +19,11 @@ e2e_output="$output_directory/e2e"
 mkdir -p "$output_directory"
 status=0
 
-if ! bash "$(dirname "$0")/iso-smoke-test.sh" "$iso_path" "$smoke_output"; then
+if ! bash "$(dirname "$0")/smoke.sh" "$iso_path" "$smoke_output"; then
     status=1
 fi
 
-if ! bash "$(dirname "$0")/iso-e2e-test.sh" "$iso_path" "$e2e_output"; then
+if ! bash "$(dirname "$0")/e2e.sh" "$iso_path" "$e2e_output"; then
     status=1
 fi
 
