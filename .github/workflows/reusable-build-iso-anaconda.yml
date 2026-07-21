@@ -194,6 +194,7 @@ jobs:
             "${IMAGE_REF}" 1 "${FLATPAKS_LIST}" squashfs NONE "${IMAGE_REF}" 1
           sudo chown "$(id -u):$(id -g)" "${titanoboa_dir}/output.iso"
           mv "${titanoboa_dir}/output.iso" output.iso
+          echo "iso-dest=${GITHUB_WORKSPACE}/output.iso" >> "${GITHUB_OUTPUT}"
 
       - name: Rename ISO
         id: rename
