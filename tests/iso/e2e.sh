@@ -97,6 +97,27 @@ if [[ -z "$iso_label" ]]; then
 fi
 echo "Using live root CDLABEL=${iso_label}"
 
+# Boot with the ISO's own GRUB kernel arguments so the live rootfs is
+# assembled exactly as on real hardware — variants disagree about details
+# like rd.live.ram vs overlay. Fall back to the historic stable args.
+iso_kargs=""
+for cfg_path in /boot/grub2/grub.cfg /EFI/BOOT/grub.cfg /boot/grub/grub.cfg; do
+    grub_cfg="$work_dir/grub.cfg"
+    rm -f "$grub_cfg"
+    if xorriso -indev "$iso_path" -osirrox on -extract "$cfg_path" "$grub_cfg" 2>/dev/null; then
+        iso_kargs="$(awk '/^[[:space:]]*linux(efi)?[[:space:]]/{for(i=3;i<=NF;i++) printf "%s ", $i; exit}' "$grub_cfg")"
+        if [[ -n "$iso_kargs" ]]; then
+            break
+        fi
+    fi
+done
+if [[ -z "$iso_kargs" ]]; then
+    iso_kargs="root=live:CDLABEL=${iso_label} rd.live.image rd.live.ram rd.neednet=1"
+fi
+# Serial-friendly, unattended: drop splash args the GRUB entry may carry.
+iso_kargs="$(sed -E 's/(^| )(quiet|rhgb|splash)( |$)/ /g' <<<"$iso_kargs" | tr -s ' ')"
+echo "Using kernel args from ISO: ${iso_kargs}"
+
 if [[ ! -f "$initrd_path" ]]; then
     xorriso -indev "$iso_path" -osirrox on -extract /boot/initramfs.img "$initrd_path"
 fi
@@ -133,7 +154,7 @@ done
     -name bluefin-e2e \
     -machine "${qemu_machine},accel=${qemu_accel}" \
     -cpu max \
-    -m 4096 \
+    -m "${E2E_MEMORY_MB:-6144}" \
     -smp 2 \
     -drive file="$install_disk",format=qcow2,if=virtio,cache=none \
     -cdrom "$iso_path" \
@@ -146,7 +167,7 @@ done
     -display none \
     -monitor none \
     -qmp "unix:$qmp_socket,server=on,wait=off" \
-    -append "console=ttyS0 rd.live.image rd.live.ram rd.neednet=1 ip=dhcp root=live:CDLABEL=${iso_label} inst.ks=http://10.0.2.2:${http_port}/kickstart.ks inst.text" \
+    -append "${iso_kargs} console=ttyS0 rd.neednet=1 ip=dhcp inst.ks=http://10.0.2.2:${http_port}/kickstart.ks inst.text" \
     -no-reboot > /dev/null 2>&1 &
 install_pid=$!
 
@@ -214,7 +235,7 @@ fi
     -name bluefin-e2e-postinstall \
     -machine "${qemu_machine},accel=${qemu_accel}" \
     -cpu max \
-    -m 4096 \
+    -m "${E2E_MEMORY_MB:-6144}" \
     -smp 2 \
     -drive file="$install_disk",format=qcow2,if=virtio,cache=none \
     -netdev user,id=net0 \
