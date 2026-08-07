@@ -111,6 +111,11 @@ jobs:
   build:
     name: Build ISOs
     runs-on: ${{ matrix.platform == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    # arm64 source images (ghcr.io/ublue-os/bluefin:lts / lts-hwe) are currently
+    # missing from the published manifest lists, so arm64 legs cannot pull a
+    # rootfs. Soft-fail them until the upstream manifests carry arm64 again,
+    # so amd64 ISOs keep publishing.
+    continue-on-error: ${{ matrix.platform == 'arm64' }}
     needs: determine-matrix
     strategy:
       fail-fast: false
@@ -194,6 +199,7 @@ jobs:
             "${IMAGE_REF}" 1 "${FLATPAKS_LIST}" squashfs NONE "${IMAGE_REF}" 1
           sudo chown "$(id -u):$(id -g)" "${titanoboa_dir}/output.iso"
           mv "${titanoboa_dir}/output.iso" output.iso
+          echo "iso-dest=$(realpath output.iso)" >> "${GITHUB_OUTPUT}"
 
       - name: Rename ISO
         id: rename
