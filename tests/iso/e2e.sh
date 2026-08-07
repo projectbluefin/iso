@@ -88,6 +88,15 @@ if [[ ! -f "$kernel_path" ]]; then
     xorriso -indev "$iso_path" -osirrox on -extract /boot/vmlinuz "$kernel_path"
 fi
 
+# The live root is found by CD label, which differs between variants
+# (stable vs LTS builders) — read it from the ISO instead of hardcoding.
+iso_label="$(xorriso -indev "$iso_path" -pvd_info 2>/dev/null \
+    | sed -n "s/^Volume Id *: *'\{0,1\}\([^']*\)'\{0,1\}[[:space:]]*$/\1/p" | head -1)"
+if [[ -z "$iso_label" ]]; then
+    iso_label="titanoboa_boot"
+fi
+echo "Using live root CDLABEL=${iso_label}"
+
 if [[ ! -f "$initrd_path" ]]; then
     xorriso -indev "$iso_path" -osirrox on -extract /boot/initramfs.img "$initrd_path"
 fi
@@ -137,7 +146,7 @@ done
     -display none \
     -monitor none \
     -qmp "unix:$qmp_socket,server=on,wait=off" \
-    -append "console=ttyS0 rd.live.image rd.live.ram rd.neednet=1 ip=dhcp root=live:CDLABEL=titanoboa_boot inst.ks=http://10.0.2.2:${http_port}/kickstart.ks inst.text" \
+    -append "console=ttyS0 rd.live.image rd.live.ram rd.neednet=1 ip=dhcp root=live:CDLABEL=${iso_label} inst.ks=http://10.0.2.2:${http_port}/kickstart.ks inst.text" \
     -no-reboot > /dev/null 2>&1 &
 install_pid=$!
 
