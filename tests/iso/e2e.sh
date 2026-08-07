@@ -167,7 +167,7 @@ done
     -display none \
     -monitor none \
     -qmp "unix:$qmp_socket,server=on,wait=off" \
-    -append "${iso_kargs} console=ttyS0 rd.neednet=1 ip=dhcp inst.ks=http://10.0.2.2:${http_port}/kickstart.ks inst.text systemd.unit=anaconda.target" \
+    -append "${iso_kargs} console=ttyS0 rd.neednet=1 ip=dhcp inst.ks=http://10.0.2.2:${http_port}/kickstart.ks inst.text systemd.unit=anaconda.target systemd.journald.forward_to_console=1" \
     -no-reboot > /dev/null 2>&1 &
 install_pid=$!
 
