@@ -26,6 +26,8 @@ image_tag="${IMAGE_TAG:-stable}"
 disk_size="${E2E_DISK_SIZE:-32G}"
 install_timeout="${E2E_INSTALL_TIMEOUT:-1800}"
 post_install_timeout="${E2E_POST_INSTALL_TIMEOUT:-180}"
+luks_enabled="${E2E_LUKS:-0}"
+luks_passphrase="${E2E_LUKS_PASSPHRASE:-bluefin-e2e-luks}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 template_file="$script_dir/data/bluefin-unattended.ks.tmpl"
@@ -63,8 +65,13 @@ if ! command -v "$qemu_binary" >/dev/null 2>&1; then
     exit 1
 fi
 
+autopart_extra=""
+if [[ "$luks_enabled" == "1" ]]; then
+    autopart_extra="--encrypted --luks-version=luks2 --passphrase=${luks_passphrase}"
+fi
+
 kickstart_file="$http_root/kickstart.ks"
-python3 - "$work_dir/bluefin-unattended.ks" "$template_file" "$image_ref" "$image_tag" <<'PY'
+python3 - "$work_dir/bluefin-unattended.ks" "$template_file" "$image_ref" "$image_tag" "$autopart_extra" <<'PY'
 import pathlib
 import sys
 
@@ -72,6 +79,7 @@ source = pathlib.Path(sys.argv[2])
 text = source.read_text()
 text = text.replace('__IMAGE_REF__', sys.argv[3])
 text = text.replace('__IMAGE_TAG__', sys.argv[4])
+text = text.replace('__AUTOPART_EXTRA__', sys.argv[5])
 pathlib.Path(sys.argv[1]).write_text(text)
 PY
 cp "$work_dir/bluefin-unattended.ks" "$kickstart_file"
@@ -160,6 +168,39 @@ kill "$install_pid" 2>/dev/null || true
 wait "$install_pid" 2>/dev/null || true
 install_pid=""
 
+luks_evidence=""
+if [[ "$luks_enabled" == "1" ]]; then
+    # Hard assertion that the installed disk really is LUKS-encrypted, before
+    # we prove it can also be unlocked at boot.
+    if command -v qemu-nbd >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        sudo modprobe nbd max_part=8
+        sudo qemu-nbd --connect=/dev/nbd0 "$install_disk"
+        for _ in $(seq 1 10); do
+            [[ -b /dev/nbd0p1 ]] && break
+            sleep 1
+        done
+        luks_parts="$(sudo blkid -o value -s TYPE /dev/nbd0p* 2>/dev/null | grep -c 'crypto_LUKS' || true)"
+        sudo qemu-nbd --disconnect /dev/nbd0 >/dev/null
+        if [[ "$luks_parts" -lt 1 ]]; then
+            echo "LUKS mode requested but no crypto_LUKS partition found on installed disk" >&2
+            exit 1
+        fi
+        luks_evidence="crypto_LUKS-partition-present"
+        echo "Verified installed disk has ${luks_parts} crypto_LUKS partition(s)"
+    else
+        echo "qemu-nbd/sudo unavailable; skipping on-disk LUKS assertion (boot unlock still enforced)" >&2
+        luks_evidence="on-disk-check-skipped"
+    fi
+fi
+
+post_serial_socket="$work_dir/post-serial.sock"
+serial_driver_pid=""
+if [[ "$luks_enabled" == "1" ]]; then
+    post_serial_args=(-chardev "socket,id=ser0,path=${post_serial_socket},server=on,wait=off" -serial chardev:ser0)
+else
+    post_serial_args=(-serial "file:$post_install_serial")
+fi
+
 "$qemu_binary" \
     -name bluefin-e2e-postinstall \
     -machine "${qemu_machine},accel=${qemu_accel}" \
@@ -169,13 +210,61 @@ install_pid=""
     -drive file="$install_disk",format=qcow2,if=virtio,cache=none \
     -netdev user,id=net0 \
     -device virtio-net-pci,netdev=net0 \
-    -serial "file:$post_install_serial" \
+    "${post_serial_args[@]}" \
     -vga std \
     -display none \
     -monitor none \
     -qmp "unix:$post_qmp_socket,server=on,wait=off" \
     > /dev/null 2>&1 &
 post_install_pid=$!
+
+if [[ "$luks_enabled" == "1" ]]; then
+    # Answer the systemd-cryptsetup passphrase prompt on the serial console and
+    # mirror everything we see into the regular post-install serial log.
+    python3 - "$post_serial_socket" "$post_install_serial" "$luks_passphrase" <<'PY' &
+import re
+import socket
+import sys
+import time
+
+sock_path, log_path, passphrase = sys.argv[1], sys.argv[2], sys.argv[3]
+
+sock = None
+for _ in range(30):
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(sock_path)
+        break
+    except OSError:
+        time.sleep(1)
+else:
+    sys.exit(1)
+
+sock.settimeout(5)
+buffer = b''
+answered = 0
+prompt = re.compile(rb'(enter passphrase|passphrase for disk|Please enter passphrase)', re.IGNORECASE)
+with open(log_path, 'wb', buffering=0) as log:
+    deadline = time.time() + 900
+    while time.time() < deadline:
+        try:
+            chunk = sock.recv(4096)
+        except socket.timeout:
+            continue
+        except OSError:
+            break
+        if not chunk:
+            break
+        log.write(chunk)
+        buffer = (buffer + chunk)[-8192:]
+        if prompt.search(buffer) and answered < 5:
+            time.sleep(1)
+            sock.sendall(passphrase.encode() + b'\n')
+            answered += 1
+            buffer = b''
+PY
+    serial_driver_pid=$!
+fi
 
 post_install_evidence=""
 post_start=$SECONDS
@@ -194,6 +283,16 @@ done
 if [[ -z "$post_install_evidence" ]]; then
     echo "Installed system did not boot within ${post_install_timeout}s" >&2
     exit 1
+fi
+
+if [[ "$luks_enabled" == "1" ]]; then
+    # The boot marker plus a passphrase prompt in the log proves the unlock
+    # path was exercised rather than the disk being silently unencrypted.
+    if ! grep -Eqi 'passphrase' "$post_install_serial" 2>/dev/null; then
+        echo "LUKS mode: installed system booted but no passphrase prompt was observed" >&2
+        exit 1
+    fi
+    luks_evidence="${luks_evidence:+${luks_evidence},}unlock-prompt-answered-and-booted"
 fi
 
 for _ in $(seq 1 10); do
@@ -238,8 +337,12 @@ fi
 
 kill "$post_install_pid" 2>/dev/null || true
 wait "$post_install_pid" 2>/dev/null || true
+if [[ -n "$serial_driver_pid" ]]; then
+    kill "$serial_driver_pid" 2>/dev/null || true
+    wait "$serial_driver_pid" 2>/dev/null || true
+fi
 
-python3 - "$summary_file" "$iso_path" "$serial_file" "$post_install_serial" "$final_screen_png" "$install_evidence" "$post_install_evidence" <<'PY'
+python3 - "$summary_file" "$iso_path" "$serial_file" "$post_install_serial" "$final_screen_png" "$install_evidence" "$post_install_evidence" "$luks_evidence" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -251,11 +354,13 @@ post_install_serial = Path(sys.argv[4])
 image_path = Path(sys.argv[5])
 install_evidence = sys.argv[6]
 post_install_evidence = sys.argv[7]
+luks_evidence = sys.argv[8] if len(sys.argv) > 8 else ''
 summary = {
     'result': 'passed' if install_evidence and post_install_evidence else 'failed',
     'iso': str(iso_path),
     'install_evidence': install_evidence or None,
     'post_install_evidence': post_install_evidence or None,
+    'luks_evidence': luks_evidence or None,
     'serial_log': serial_path.name if serial_path.exists() else None,
     'post_install_serial_log': post_install_serial.name if post_install_serial.exists() else None,
     'final_screen_image': image_path.name if image_path.exists() else None,
