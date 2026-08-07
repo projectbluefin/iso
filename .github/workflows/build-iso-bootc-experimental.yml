@@ -7,6 +7,12 @@ name: Build Experimental bootc ISOs
 # compared side by side for a while.
 on:
   workflow_dispatch:
+  # Temporary: branch-scoped push trigger so the workflow can run before the
+  # file exists on main (workflow_dispatch only resolves default-branch
+  # workflows). Remove before merging.
+  push:
+    branches: [claude/resurrect-bootc-iso]
+    paths: ['bootc-iso/**', '.github/workflows/*bootc*.yml']
 
 permissions:
   contents: read

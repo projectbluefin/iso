@@ -5,6 +5,12 @@ name: LUKS Install End-to-End Test (bootc-iso, experimental)
 # it must never run on pull_request or a schedule.
 on:
   workflow_dispatch:
+  # Temporary: branch-scoped push trigger so the workflow can run before the
+  # file exists on main (workflow_dispatch only resolves default-branch
+  # workflows). Remove before merging.
+  push:
+    branches: [claude/resurrect-bootc-iso]
+    paths: ['bootc-iso/**', '.github/workflows/*bootc*.yml']
 
 permissions:
   issues: write
