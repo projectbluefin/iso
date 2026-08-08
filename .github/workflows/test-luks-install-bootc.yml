@@ -5,6 +5,10 @@ name: LUKS Install End-to-End Test (bootc-iso, experimental)
 # it must never run on pull_request or a schedule.
 on:
   workflow_dispatch:
+  # Weekly regression run (matches the cadence from the original #61) so
+  # LUKS install+unlock coverage does not rot between manual dispatches.
+  schedule:
+    - cron: '0 4 * * 1'
   # Temporary: branch-scoped push trigger so the workflow can run before the
   # file exists on main (workflow_dispatch only resolves default-branch
   # workflows). Remove before merging.
