@@ -1,0 +1,80 @@
+name: Build Experimental bootc ISOs
+
+# Experimental fisherman/bootcDirect ISO variant (resurrected from PR #61,
+# reverted in #66; lives under bootc-iso/). Published as clearly-labeled
+# workflow artifacts ONLY — deliberately NOT wired into the scheduled or
+# production publish workflows or releases, so both installer paths can be
+# compared side by side for a while.
+on:
+  workflow_dispatch:
+  # Temporary: branch-scoped push trigger so the workflow can run before the
+  # file exists on main (workflow_dispatch only resolves default-branch
+  # workflows). Remove before merging.
+  push:
+    branches: [claude/resurrect-bootc-iso]
+    paths: ['bootc-iso/**', '.github/workflows/*bootc*.yml']
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }} (experimental bootc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [bluefin, bluefin-lts]
+    defaults:
+      run:
+        working-directory: bootc-iso
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y just podman buildah mtools xorriso -qq
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            sudo podman login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Configure podman storage (intelligent driver selection)
+        run: bash scripts/configure_podman_storage.sh
+
+      - name: Build ISO
+        run: |
+          sudo mkdir -p /var/iso-build
+          sudo $(command -v just) installer_channel=stable compression=release \
+            output_dir=/var/iso-build iso-sd-boot ${{ matrix.target }}
+
+      - name: Rename ISO with experimental-bootc suffix
+        run: |
+          mkdir -p output
+          sudo mv "/var/iso-build/${{ matrix.target }}-live.iso" \
+            "output/${{ matrix.target }}-experimental-bootc-x86_64.iso"
+          sudo chown -R "$USER:$(id -gn)" output/
+          sha256sum "output/${{ matrix.target }}-experimental-bootc-x86_64.iso" \
+            > "output/${{ matrix.target }}-experimental-bootc-x86_64.iso-CHECKSUM"
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-experimental-bootc-x86_64
+          path: |
+            bootc-iso/output/${{ matrix.target }}-experimental-bootc-x86_64.iso
+            bootc-iso/output/${{ matrix.target }}-experimental-bootc-x86_64.iso-CHECKSUM
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
