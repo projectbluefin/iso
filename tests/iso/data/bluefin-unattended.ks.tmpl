@@ -4,7 +4,7 @@ timezone UTC --utc
 network --bootproto=dhcp --device=link --activate
 zerombr
 clearpart --all --initlabel
-autopart --type=plain
+autopart --type=plain __AUTOPART_EXTRA__
 rootpw --plaintext bluefin
 user --name=bluefin --password bluefin --groups=wheel
 bootloader --location=mbr --append="console=ttyS0"
