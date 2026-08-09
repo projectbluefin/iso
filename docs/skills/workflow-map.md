@@ -1,7 +1,7 @@
 ---
 name: workflow-map
 version: "1.0"
-last_updated: 2026-07-17
+last_updated: 2026-08-04
 tags: [workflows, iso, build]
 description: "Use when you need to understand how the Bluefin ISO builder workflows fit together or update workflow documentation for this repository."
 metadata:
@@ -56,6 +56,7 @@ Do not use this skill for implementation changes that belong in the workflow fil
 
 ## Operational notes
 
+- The reusable build job runs the org-standard disk cleanup action before dependency installation and checkout. Keep it at the start of the job because Titanoboa expands the source image's OSTree layers onto the runner.
 - LTS non-HWE production promotion is disabled while the LTS build remains broken.
 - Only `variant: stable` promotion is safe until the LTS issue is resolved.
 - Flatpak lists are assembled at build time from `projectbluefin/common`'s `*system-flatpaks.Brewfile` files.
