@@ -30,6 +30,11 @@ on:
         description: 'Variant being validated'
         required: false
         type: string
+      luks:
+        description: 'Install with LUKS full-disk encryption and verify unlock at boot'
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       iso_url:
@@ -62,6 +67,11 @@ on:
         required: false
         type: string
         default: ''
+      luks:
+        description: 'Install with LUKS full-disk encryption and verify unlock at boot'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -131,7 +141,12 @@ jobs:
       - name: Run the e2e harness
         env:
           IMAGE_REF: ghcr.io/ublue-os/bluefin
-          IMAGE_TAG: stable
+          # The kickstart's ostreecontainer ref must match the image embedded
+          # in the ISO's container storage, which follows the variant.
+          IMAGE_TAG: ${{ startsWith(inputs.variant, 'lts') && inputs.variant || 'stable' }}
+          E2E_LUKS: ${{ inputs.luks && '1' || '0' }}
+          # LUKS boots pause at the passphrase prompt before the login marker.
+          E2E_POST_INSTALL_TIMEOUT: ${{ inputs.luks && '600' || '180' }}
         run: |
           bash tests/iso/e2e.sh "${{ steps.context.outputs.iso_path }}" e2e-output
 
