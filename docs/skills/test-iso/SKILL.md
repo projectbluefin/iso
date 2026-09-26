@@ -49,6 +49,12 @@ The installer E2E phase passes only after the installer reports completion and t
 
 A promotion candidate requires a successful matching smoke run. A run for another tag or variant is not evidence.
 
+## Harness internals worth knowing
+
+- The install VM boots the ISO's extracted `vmlinuz` and `initramfs.img` directly; the ISO is only the live root. That initramfs (titanoboa: `dracut --add "dmsquash-live ..."`) has no anaconda dracut module, so `inst.ks=<url>` is never fetched. `e2e.sh` appends a gzip cpio overlay carrying `/etc/e2e/ks.cfg` and an initrd unit that copies it to `/run/install/ks.cfg` (the only path anaconda's `inst.ks=` option reads) before switch-root. Needs `cpio` and `gzip` on the runner.
+- `installer-serial.log` is the first thing to read on a failure. `Kickstart file /run/install/ks.cfg is missing.` means the overlay was not applied. `Installer did not report completion` with anaconda logs present means the install itself was slow or wedged; the Subscription DBus module always burns 600 seconds before installation starts, which the default `E2E_INSTALL_TIMEOUT` already accounts for.
+- Serial logs are dominated by `brltty` noise; filter it (`grep -v brltty`) before reading anaconda output.
+
 ## Related documents
 
 - [QA](../../qa.md)
