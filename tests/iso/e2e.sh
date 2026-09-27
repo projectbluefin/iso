@@ -57,7 +57,7 @@ if [[ ! -f "$iso_path" ]]; then
     exit 1
 fi
 
-for tool in "$qemu_img_binary" "$qemu_binary" xorriso cpio gzip; do
+for tool in "$qemu_img_binary" "$qemu_binary" xorriso unsquashfs cpio gzip; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "Required tool not found: $tool" >&2
         exit 1
@@ -69,15 +69,59 @@ if [[ "$luks_enabled" == "1" ]]; then
     autopart_extra="--encrypted --luks-version=luks2 --passphrase=${luks_passphrase}"
 fi
 
-python3 - "$kickstart_file" "$template_file" "$image_ref" "$image_tag" "$autopart_extra" <<'PY'
+# anaconda's `ostree container image deploy --transport=containers-storage`
+# resolves the kickstart's --url against the live root's container store,
+# never against a registry. titanoboa fills that store with `podman pull
+# <IMAGE_REF>` (Justfile: rootfs-include-container), so the name the image is
+# stored under is whatever the build pulled — the nvidia-open ISO embeds
+# bluefin-nvidia-open, not bluefin. Read the stored names out of the ISO's
+# squashfs instead of trusting IMAGE_REF/IMAGE_TAG so the harness cannot drift
+# from the build; IMAGE_REF:IMAGE_TAG only picks between multiple stored images.
+images_json_member="var/lib/containers/storage/overlay-images/images.json"
+squashfs_root="$work_dir/squashfs-root"
+rm -rf "$squashfs_root"
+# unsquashfs can read the squashfs straight out of the ISO when its extents
+# are contiguous (xorrisofs writes them that way); otherwise extract it first.
+squashfs_offset="$(xorriso -indev "$iso_path" -find /LiveOS/squashfs.img -exec report_lba -- 2>/dev/null \
+    | awk -F' *, *' 'BEGIN { ok = 1 } /^File data lba:/ { if (n > 0 && $2 != want) ok = 0; if (n == 0) start = $2; want = $2 + $3; n++ } END { if (n > 0 && ok) printf "%.0f", start * 2048 }')"
+if [[ -n "$squashfs_offset" ]]; then
+    unsquashfs -n -q -no-xattrs -o "$squashfs_offset" -d "$squashfs_root" "$iso_path" "$images_json_member" >/dev/null
+else
+    xorriso -indev "$iso_path" -osirrox on -extract /LiveOS/squashfs.img "$work_dir/squashfs.img"
+    unsquashfs -n -q -no-xattrs -d "$squashfs_root" "$work_dir/squashfs.img" "$images_json_member" >/dev/null
+    rm -f "$work_dir/squashfs.img"
+fi
+if [[ ! -f "$squashfs_root/$images_json_member" ]]; then
+    echo "ISO has no embedded container image store ($images_json_member missing from /LiveOS/squashfs.img)" >&2
+    exit 1
+fi
+image_url="$(python3 - "$squashfs_root/$images_json_member" "${image_ref}:${image_tag}" <<'PY'
+import json
+import sys
+
+images = json.load(open(sys.argv[1]))
+names = [name for image in images for name in image.get('names') or []]
+requested = sys.argv[2]
+if requested in names:
+    print(requested)
+elif len(images) == 1 and names:
+    print(f"note: ISO store has no {requested}; using its only image {names[0]}", file=sys.stderr)
+    print(names[0])
+else:
+    print(f"ISO store has no {requested} and {len(images)} images to choose from: {names}", file=sys.stderr)
+    sys.exit(1)
+PY
+)"
+echo "Using kickstart ostreecontainer --url=${image_url} (from ISO ${images_json_member})"
+
+python3 - "$kickstart_file" "$template_file" "$image_url" "$autopart_extra" <<'PY'
 import pathlib
 import sys
 
 source = pathlib.Path(sys.argv[2])
 text = source.read_text()
-text = text.replace('__IMAGE_REF__', sys.argv[3])
-text = text.replace('__IMAGE_TAG__', sys.argv[4])
-text = text.replace('__AUTOPART_EXTRA__', sys.argv[5])
+text = text.replace('__IMAGE_URL__', sys.argv[3])
+text = text.replace('__AUTOPART_EXTRA__', sys.argv[4])
 pathlib.Path(sys.argv[1]).write_text(text)
 PY
 
@@ -157,6 +201,16 @@ cpio -itv --quiet < "$initrd_overlay_cpio"
 
 if [[ ! -f "$install_disk" ]]; then
     "$qemu_img_binary" create -f qcow2 "$install_disk" "$disk_size"
+fi
+
+# accel=kvm:tcg falls back silently; say which one the VM will get so a
+# 45-minute TCG install is not mistaken for a wedged installer.
+if [[ "$qemu_accel" == kvm* ]]; then
+    if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+        echo "QEMU accelerator: kvm (/dev/kvm usable)"
+    else
+        echo "QEMU accelerator: tcg (/dev/kvm not usable; expect a slow install)"
+    fi
 fi
 
 cleanup() {
