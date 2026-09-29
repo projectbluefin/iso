@@ -49,7 +49,13 @@ Review the workflow summary and downloaded proof artifacts. Record the prereleas
 
 `.github/workflows/iso-e2e-test.yml` invokes the canonical `tests/iso/e2e.sh` harness (with `hack/iso-e2e-test.sh` retained as a compatibility entry point) to exercise unattended installation under QEMU. Use this path when the change affects installation, disk setup, boot, or post-install behavior.
 
-The harness writes logs, screenshots, summary data, and proof files to its output directory. It passes only after the installer reports completion and the installed system produces serial boot evidence. `E2E_INSTALL_TIMEOUT` (default 1800 seconds) and `E2E_POST_INSTALL_TIMEOUT` (default 180 seconds) can tune the two phases. Keep generated files out of source changes.
+The harness writes logs, screenshots, summary data, and proof files to its output directory. It passes only after the installer reports completion and the installed system produces serial boot evidence. `E2E_INSTALL_TIMEOUT` (default 2700 seconds) and `E2E_POST_INSTALL_TIMEOUT` (default 180 seconds) can tune the two phases. Keep generated files out of source changes.
+
+The kickstart is delivered inside the initramfs, not over the network: the harness appends a gzip cpio overlay to the ISO's `initramfs.img` that carries the rendered kickstart plus a `e2e-kickstart.service` initrd unit, which copies it to `/run/install/ks.cfg` before switch-root. That is the only path anaconda reads for `inst.ks=`, and the titanoboa initramfs has no anaconda dracut module to fetch a URL into it. If the serial log ends with `Kickstart file /run/install/ks.cfg is missing.`, the overlay did not unpack or the unit did not run; check for `e2e-kickstart.service` in the initrd portion of `installer-serial.log`.
+
+The kickstart's `ostreecontainer --url` is read from the ISO itself: the harness pulls `var/lib/containers/storage/overlay-images/images.json` out of `/LiveOS/squashfs.img` (`squashfs-tools`) and uses the name the build stored the payload under, so the E2E cannot ask anaconda for an image the ISO does not carry (the nvidia-open ISO embeds `bluefin-nvidia-open`). `IMAGE_REF`/`IMAGE_TAG` only disambiguate if an ISO ever carries several images. The kickstart's `%pre` and `%pre-install` blocks print `e2e-pre:` and `e2e-pre-install:` lines to the serial log with the installer's own view of the store, the latter immediately before the payload step.
+
+Budget note: anaconda's optional Subscription DBus module fails to activate in this image and dbus waits its full 600-second `service_start_timeout` before installation starts (`Failed to activate service 'org.fedoraproject.Anaconda.Modules.Subscription': timed out`). The install timeout includes that dead time.
 
 ## Failure rules
 

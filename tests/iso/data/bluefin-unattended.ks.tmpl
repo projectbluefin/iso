@@ -8,5 +8,20 @@ autopart --type=plain __AUTOPART_EXTRA__
 rootpw --plaintext bluefin
 user --name=bluefin --password bluefin --groups=wheel
 bootloader --location=mbr --append="console=ttyS0"
-ostreecontainer --url=__IMAGE_REF__:__IMAGE_TAG__ --transport=containers-storage --no-signature-verification
+ostreecontainer --url=__IMAGE_URL__ --transport=containers-storage --no-signature-verification
 reboot
+
+# Triage evidence on the serial console: what the installer's own
+# containers-storage holds, and whether the deploy's lookup resolves there.
+# %pre runs right after kickstart parsing, %pre-install right before the
+# payload step that runs `ostree container image deploy`.
+%pre --log=/dev/ttyS0
+echo "e2e-pre: containers-storage images: $(podman images --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>&1 | tr '\n' ';')"
+echo "e2e-pre: skopeo inspect containers-storage:__IMAGE_URL__: $(skopeo inspect --format '{{.Digest}}' containers-storage:__IMAGE_URL__ 2>&1)"
+%end
+
+%pre-install --log=/dev/ttyS0
+echo "e2e-pre-install: containers-storage images: $(podman images --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>&1 | tr '\n' ';')"
+echo "e2e-pre-install: skopeo inspect containers-storage:__IMAGE_URL__: $(skopeo inspect --format '{{.Digest}}' containers-storage:__IMAGE_URL__ 2>&1)"
+echo "e2e-pre-install: storage mounts: $(findmnt -rno TARGET,SOURCE,FSTYPE / /var/lib/containers/storage/overlay 2>&1 | tr '\n' ';')"
+%end

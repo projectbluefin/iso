@@ -20,11 +20,10 @@ qemu_binary="${QEMU_BINARY:-qemu-system-x86_64}"
 qemu_img_binary="${QEMU_IMG_BINARY:-qemu-img}"
 qemu_machine="${QEMU_MACHINE:-q35}"
 qemu_accel="${QEMU_ACCEL:-kvm:tcg}"
-http_port="${E2E_HTTP_PORT:-18080}"
 image_ref="${IMAGE_REF:-ghcr.io/ublue-os/bluefin}"
 image_tag="${IMAGE_TAG:-stable}"
 disk_size="${E2E_DISK_SIZE:-32G}"
-install_timeout="${E2E_INSTALL_TIMEOUT:-1800}"
+install_timeout="${E2E_INSTALL_TIMEOUT:-2700}"
 post_install_timeout="${E2E_POST_INSTALL_TIMEOUT:-180}"
 luks_enabled="${E2E_LUKS:-0}"
 luks_passphrase="${E2E_LUKS_PASSPHRASE:-bluefin-e2e-luks}"
@@ -38,14 +37,17 @@ proof_file="$output_directory/e2e-proof.svg"
 final_screen_ppm="$output_directory/final-screen.ppm"
 final_screen_png="$output_directory/final-screen.png"
 install_disk="$output_directory/installed.qcow2"
-http_root="$output_directory/http-root"
+kickstart_file="$output_directory/kickstart.ks"
 work_dir="$output_directory/.work"
 kernel_path="$work_dir/vmlinuz"
 initrd_path="$work_dir/initramfs.img"
+e2e_initrd_path="$work_dir/initramfs-e2e.img"
+initrd_overlay_dir="$work_dir/initrd-overlay"
+initrd_overlay_cpio="$work_dir/e2e-overlay.cpio"
 qmp_socket="$output_directory/.work/qmp.sock"
 post_qmp_socket="$output_directory/.work/post-qmp.sock"
 
-mkdir -p "$http_root" "$work_dir"
+mkdir -p "$work_dir"
 
 install_pid=""
 post_install_pid=""
@@ -55,34 +57,73 @@ if [[ ! -f "$iso_path" ]]; then
     exit 1
 fi
 
-if ! command -v "$qemu_img_binary" >/dev/null 2>&1; then
-    echo "QEMU image tool not found: $qemu_img_binary" >&2
-    exit 1
-fi
-
-if ! command -v "$qemu_binary" >/dev/null 2>&1; then
-    echo "QEMU binary not found: $qemu_binary" >&2
-    exit 1
-fi
+for tool in "$qemu_img_binary" "$qemu_binary" xorriso unsquashfs cpio gzip; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "Required tool not found: $tool" >&2
+        exit 1
+    fi
+done
 
 autopart_extra=""
 if [[ "$luks_enabled" == "1" ]]; then
     autopart_extra="--encrypted --luks-version=luks2 --passphrase=${luks_passphrase}"
 fi
 
-kickstart_file="$http_root/kickstart.ks"
-python3 - "$work_dir/bluefin-unattended.ks" "$template_file" "$image_ref" "$image_tag" "$autopart_extra" <<'PY'
+# anaconda's `ostree container image deploy --transport=containers-storage`
+# resolves the kickstart's --url against the live root's container store,
+# never against a registry. titanoboa fills that store with `podman pull
+# <IMAGE_REF>` (Justfile: rootfs-include-container), so the name the image is
+# stored under is whatever the build pulled — the nvidia-open ISO embeds
+# bluefin-nvidia-open, not bluefin. Read the stored names out of the ISO's
+# squashfs instead of trusting IMAGE_REF/IMAGE_TAG so the harness cannot drift
+# from the build; IMAGE_REF:IMAGE_TAG only picks between multiple stored images.
+images_json_member="var/lib/containers/storage/overlay-images/images.json"
+squashfs_root="$work_dir/squashfs-root"
+rm -rf "$squashfs_root"
+# unsquashfs can read the squashfs straight out of the ISO when its extents
+# are contiguous (xorrisofs writes them that way); otherwise extract it first.
+squashfs_offset="$(xorriso -indev "$iso_path" -find /LiveOS/squashfs.img -exec report_lba -- 2>/dev/null \
+    | awk -F' *, *' 'BEGIN { ok = 1 } /^File data lba:/ { if (n > 0 && $2 != want) ok = 0; if (n == 0) start = $2; want = $2 + $3; n++ } END { if (n > 0 && ok) printf "%.0f", start * 2048 }')"
+if [[ -n "$squashfs_offset" ]]; then
+    unsquashfs -n -q -no-xattrs -o "$squashfs_offset" -d "$squashfs_root" "$iso_path" "$images_json_member" >/dev/null
+else
+    xorriso -indev "$iso_path" -osirrox on -extract /LiveOS/squashfs.img "$work_dir/squashfs.img"
+    unsquashfs -n -q -no-xattrs -d "$squashfs_root" "$work_dir/squashfs.img" "$images_json_member" >/dev/null
+    rm -f "$work_dir/squashfs.img"
+fi
+if [[ ! -f "$squashfs_root/$images_json_member" ]]; then
+    echo "ISO has no embedded container image store ($images_json_member missing from /LiveOS/squashfs.img)" >&2
+    exit 1
+fi
+image_url="$(python3 - "$squashfs_root/$images_json_member" "${image_ref}:${image_tag}" <<'PY'
+import json
+import sys
+
+images = json.load(open(sys.argv[1]))
+names = [name for image in images for name in image.get('names') or []]
+requested = sys.argv[2]
+if requested in names:
+    print(requested)
+elif len(images) == 1 and names:
+    print(f"note: ISO store has no {requested}; using its only image {names[0]}", file=sys.stderr)
+    print(names[0])
+else:
+    print(f"ISO store has no {requested} and {len(images)} images to choose from: {names}", file=sys.stderr)
+    sys.exit(1)
+PY
+)"
+echo "Using kickstart ostreecontainer --url=${image_url} (from ISO ${images_json_member})"
+
+python3 - "$kickstart_file" "$template_file" "$image_url" "$autopart_extra" <<'PY'
 import pathlib
 import sys
 
 source = pathlib.Path(sys.argv[2])
 text = source.read_text()
-text = text.replace('__IMAGE_REF__', sys.argv[3])
-text = text.replace('__IMAGE_TAG__', sys.argv[4])
-text = text.replace('__AUTOPART_EXTRA__', sys.argv[5])
+text = text.replace('__IMAGE_URL__', sys.argv[3])
+text = text.replace('__AUTOPART_EXTRA__', sys.argv[4])
 pathlib.Path(sys.argv[1]).write_text(text)
 PY
-cp "$work_dir/bluefin-unattended.ks" "$kickstart_file"
 
 if [[ ! -f "$kernel_path" ]]; then
     xorriso -indev "$iso_path" -osirrox on -extract /boot/vmlinuz "$kernel_path"
@@ -122,12 +163,56 @@ if [[ ! -f "$initrd_path" ]]; then
     xorriso -indev "$iso_path" -osirrox on -extract /boot/initramfs.img "$initrd_path"
 fi
 
+# anaconda's inst.ks= boot option does not carry a location into stage 2: it
+# is a store_const that only sets --ks=/run/install/ks.cfg
+# (pyanaconda/argument_parsing.py). Fetching the kickstart into that path is
+# the job of anaconda's dracut module (anaconda-lib.sh:parse_kickstart), which
+# the ISO's initramfs does not carry (titanoboa runs dracut with only
+# dmsquash-live added), so anaconda aborts with "Kickstart file
+# /run/install/ks.cfg is missing." Do that step ourselves: ship the kickstart
+# in an initramfs overlay and copy it into /run/install, which systemd carries
+# across switch-root, before the pivot.
+mkdir -p "$initrd_overlay_dir/etc/e2e" "$initrd_overlay_dir/etc/systemd/system/initrd.target.wants"
+cp "$kickstart_file" "$initrd_overlay_dir/etc/e2e/ks.cfg"
+cat > "$initrd_overlay_dir/etc/systemd/system/e2e-kickstart.service" <<'EOF'
+[Unit]
+Description=Stage the E2E kickstart at /run/install/ks.cfg for anaconda
+DefaultDependencies=no
+ConditionPathExists=/etc/initrd-release
+Before=initrd-cleanup.service initrd-switch-root.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'mkdir -p /run/install && cp /etc/e2e/ks.cfg /run/install/ks.cfg'
+
+[Install]
+WantedBy=initrd.target
+EOF
+ln -s ../e2e-kickstart.service "$initrd_overlay_dir/etc/systemd/system/initrd.target.wants/e2e-kickstart.service"
+(cd "$initrd_overlay_dir" && find . -mindepth 1 -print0 | LC_ALL=C sort -z \
+    | cpio --null --quiet -o -H newc -R 0:0) > "$initrd_overlay_cpio"
+echo "Initramfs overlay contents:"
+cpio -itv --quiet < "$initrd_overlay_cpio"
+# The kernel unpacks concatenated initramfs segments one after another. A
+# separately compressed trailer needs no 4-byte alignment against the ISO's
+# zstd image, which is how virt-install --initrd-inject appends files too.
+{ cat "$initrd_path"; gzip -n < "$initrd_overlay_cpio"; } > "$e2e_initrd_path"
+
 if [[ ! -f "$install_disk" ]]; then
     "$qemu_img_binary" create -f qcow2 "$install_disk" "$disk_size"
 fi
 
-python3 -m http.server "$http_port" --bind 0.0.0.0 --directory "$http_root" >/dev/null 2>&1 &
-http_server_pid=$!
+# accel=kvm:tcg falls back silently; say which one the VM will get so a
+# 45-minute TCG install is not mistaken for a wedged installer.
+if [[ "$qemu_accel" == kvm* ]]; then
+    if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+        echo "QEMU accelerator: kvm (/dev/kvm usable)"
+    else
+        echo "QEMU accelerator: tcg (/dev/kvm not usable; expect a slow install)"
+    fi
+fi
+
 cleanup() {
     local exit_code=$?
     for pid in "$install_pid" "$post_install_pid"; do
@@ -136,19 +221,10 @@ cleanup() {
             wait "$pid" 2>/dev/null || true
         fi
     done
-    kill "$http_server_pid" 2>/dev/null || true
-    wait "$http_server_pid" 2>/dev/null || true
     rm -rf "$work_dir"
     exit "$exit_code"
 }
 trap cleanup EXIT
-
-for _ in $(seq 1 20); do
-    if curl --silent --show-error --fail "http://127.0.0.1:${http_port}/kickstart.ks" >/dev/null 2>&1; then
-        break
-    fi
-    sleep 1
-done
 
 "$qemu_binary" \
     -name bluefin-e2e \
@@ -159,7 +235,7 @@ done
     -drive file="$install_disk",format=qcow2,if=virtio,cache=none \
     -cdrom "$iso_path" \
     -kernel "$kernel_path" \
-    -initrd "$initrd_path" \
+    -initrd "$e2e_initrd_path" \
     -netdev user,id=net0 \
     -device virtio-net-pci,netdev=net0 \
     -serial "file:$serial_file" \
@@ -167,7 +243,7 @@ done
     -display none \
     -monitor none \
     -qmp "unix:$qmp_socket,server=on,wait=off" \
-    -append "${iso_kargs} console=ttyS0 rd.neednet=1 ip=dhcp inst.ks=http://10.0.2.2:${http_port}/kickstart.ks inst.text systemd.unit=anaconda.target systemd.journald.forward_to_console=1" \
+    -append "${iso_kargs} console=ttyS0 rd.neednet=1 ip=dhcp inst.ks=file:/etc/e2e/ks.cfg inst.text systemd.unit=anaconda.target systemd.journald.forward_to_console=1" \
     -no-reboot > /dev/null 2>&1 &
 install_pid=$!
 
