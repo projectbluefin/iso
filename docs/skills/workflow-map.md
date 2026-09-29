@@ -1,7 +1,7 @@
 ---
 name: workflow-map
 version: "1.0"
-last_updated: 2026-07-17
+last_updated: 2026-09-24
 tags: [workflows, iso, build]
 description: "Use when you need to understand how the Bluefin ISO builder workflows fit together or update workflow documentation for this repository."
 metadata:
@@ -56,6 +56,9 @@ Do not use this skill for implementation changes that belong in the workflow fil
 
 ## Operational notes
 
+- The reusable build job runs `ublue-os/remove-unwanted-software` with `extra-squeeze` before dependency installation and checkout on both amd64 and arm64. Keep it at the start of the job because Titanoboa expands the source image's OSTree layers onto the runner. This provides disk headroom; it does not establish that a failed build ran out of space.
+- The cleanup action is pinned to the untagged `695eb75bc387dbcd9685a8e72d23439d8686cba6` commit from 2025-10-10. Do not label it `v10`: that was an upstream branch name, not a release tag. The released `v9` does not expose `extra-squeeze`; verify both tag provenance and inputs before changing the pin.
+- `just check` and pre-commit validate formatting and syntax, not ISO build or installation success. Inspect the individual CI jobs: arm64 build failures are tolerated while upstream manifests are incomplete, and Stable E2E jobs are skipped if their prerequisite build fails.
 - LTS non-HWE production promotion is disabled while the LTS build remains broken.
 - Only `variant: stable` promotion is safe until the LTS issue is resolved.
 - Flatpak lists are assembled at build time from `projectbluefin/common`'s `*system-flatpaks.Brewfile` files.
