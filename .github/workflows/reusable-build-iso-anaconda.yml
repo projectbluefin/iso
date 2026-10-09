@@ -126,6 +126,11 @@ jobs:
       id-token: write
 
     steps:
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6 # master@2025-10-10 (untagged)
+        with:
+          extra-squeeze: "true"
+
       - name: Install dependencies
         if: matrix.platform == 'arm64'
         run: |
