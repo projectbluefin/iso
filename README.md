@@ -13,13 +13,13 @@ Workflows and configuration files needed to build bootable Bluefin ISOs for inst
 
 ![ISO go nomnom](https://github.com/user-attachments/assets/2feeb772-713f-40b3-81e8-3f93b157fa13)
 
-## ⚠️ LTS ISO Status: DISABLED
+## LTS ISO Status: production promotion blocked
 
 **LTS (non-HWE) ISOs are currently broken.** Anaconda does not work correctly on
 the LTS base image. This affects **all LTS flavors** including `main` and `gdx`
-(Gnome Developer Experience). The `build-iso-lts.yml` workflow has no schedule and
-will not fire automatically. Working LTS ISOs remain in the production bucket from
-before this breakage and must not be overwritten.
+(Gnome Developer Experience). The individual `build-iso-lts.yml` workflow is manual;
+`build-iso-all.yml` builds monthly candidates into the testing bucket only. Working
+LTS ISOs remain in the production bucket and must not be overwritten.
 
 **Known symptom:** The installer completes normally but account creation fails
 on first boot, leaving the system in an unusable state (#51).
@@ -36,9 +36,9 @@ The ISO build system consists of independent, focused workflows:
 ```
 ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
 │  build-iso-lts      │  │  build-iso-lts-hwe  │  │  build-iso-stable   │
-│  (DISABLED)         │  │                     │  │                     │
+│  (manual only)      │  │  (manual only)      │  │  (manual only)      │
 │ ✓ workflow_dispatch │  │ ✓ workflow_dispatch │  │ ✓ workflow_dispatch │
-│ ✗ no schedule       │  │ ✓ schedule (cron)   │  │ ✓ schedule (cron)   │
+│ ✗ no schedule       │  │ ✗ no schedule       │  │ ✗ no schedule       │
 │                     │  │                     │  │                     │
 │ Builds: LTS ISOs    │  │ Builds: LTS-HWE ISOs│  │ Builds: Stable ISOs │
 │ - amd64 × main      │  │ - amd64 × main      │  │ - amd64 × main      │
@@ -84,13 +84,13 @@ The ISO build system consists of independent, focused workflows:
 
 ### Key Features
 - **Strict ISO Scoping:** Each workflow builds ONLY its designated ISOs — no cross-contamination
-  - `build-iso-lts.yml` → **LTS ISOs only** — currently DISABLED (Anaconda broken on LTS)
+  - `build-iso-lts.yml` → **LTS ISOs only** — manual testing; production promotion remains blocked
   - `build-iso-lts-hwe.yml` → **LTS-HWE ISOs only**
   - `build-iso-stable.yml` → **Stable ISOs only**
 - **Independent Execution:** Each workflow can run independently
 - **Flexible Upload:** Control artifact and R2 uploads per execution
 - **Testing tags:** LTS and LTS-HWE callers accept `image_tag` input to select `-testing` variants
-- **Monthly schedule:** Stable and LTS-HWE run at 2am UTC on the 1st of every month
+- **Monthly schedule:** `build-iso-all.yml` builds all production-tag candidates once at 03:00 UTC on the 1st; individual workflows remain manual
 
 ## ISO Variants
 
@@ -118,7 +118,7 @@ Each workflow is **strictly scoped** to build only its designated ISO variant:
 
 | Workflow File | Builds | Does NOT Build |
 |---------------|--------|----------------|
-| `build-iso-lts.yml` | **4 LTS ISOs only** (DISABLED — no schedule)<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ Stable<br/>❌ LTS-HWE |
+| `build-iso-lts.yml` | **4 LTS ISOs only** (manual candidates; do not promote)<br/>- amd64 × main<br/>- amd64 × gdx<br/>- arm64 × main<br/>- arm64 × gdx | ❌ Stable<br/>❌ LTS-HWE |
 | `build-iso-lts-hwe.yml` | **2 LTS-HWE ISOs only** (production tags)<br/>- amd64 × main<br/>- arm64 × main | ❌ Stable<br/>❌ LTS<br/>❌ Testing tags |
 | `build-iso-lts-hwe-testing.yml` | **2 LTS-HWE testing ISOs only** (weekly schedule)<br/>- amd64 × main (lts-hwe-testing)<br/>- arm64 × main (lts-hwe-testing) | ❌ Stable<br/>❌ Production tags |
 | `build-iso-stable.yml` | **2 Stable ISOs only**<br/>- amd64 × main<br/>- amd64 × nvidia-open | ❌ LTS<br/>❌ LTS-HWE |
@@ -145,8 +145,9 @@ Trigger individual workflow dispatches for specific variants:
 
 ### Automatic Build
 ISOs are built automatically:
-- **Monthly schedule:** Stable and LTS-HWE run at 2am UTC on the 1st of every month
-- **LTS:** No automatic schedule — see LTS disabled warning above
+- **Monthly schedule:** `build-iso-all.yml` builds all eight production-tag candidates at 03:00 UTC on the 1st, uploading to the testing bucket only
+- **Individual variants:** manual dispatch only; LTS production promotion remains blocked
+- **HWE testing:** the separate `build-iso-lts-hwe-testing.yml` schedule remains Monday at 06:17 UTC
 - **On changes:** When ISO configuration files are modified (via pull requests)
 
 ## Repository Structure
@@ -155,9 +156,9 @@ ISOs are built automatically:
 .
 ├── .github/workflows/
 │   ├── build-iso-stable.yml             # Caller: Stable ISOs
-│   ├── build-iso-lts.yml                # Caller: LTS ISOs (DISABLED)
+│   ├── build-iso-lts.yml                # Manual caller: LTS candidates (do not promote)
 │   ├── build-iso-lts-hwe.yml            # Caller: LTS-HWE ISOs
-│   ├── build-iso-all.yml                # Orchestrator (workflow_dispatch only)
+│   ├── build-iso-all.yml                # Orchestrator (monthly schedule and manual dispatch)
 │   ├── reusable-build-iso-anaconda.yml  # Core build logic
 │   ├── promote-iso.yml                  # Promote testing → production
 │   ├── pull-request.yml                 # PR check builds (no upload)
