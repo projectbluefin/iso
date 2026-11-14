@@ -181,7 +181,12 @@ jobs:
       - name: Install QEMU and ISO inspection tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes qemu-system-x86 xorriso
+          sudo apt-get install --yes acl qemu-system-x86 xorriso
+
+      - name: Enable KVM for the runner user
+        run: |
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          getfacl --absolute-names /dev/kvm
 
       - name: Run boot smoke test
         id: smoke
