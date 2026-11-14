@@ -183,11 +183,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes acl qemu-system-x86 xorriso
 
-      - name: Enable KVM for the runner user
-        run: |
-          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
-          getfacl --absolute-names /dev/kvm
-
       - name: Run boot smoke test
         id: smoke
         continue-on-error: true
@@ -199,6 +194,8 @@ jobs:
             [[ -n "$iso_path" ]] || continue
             output_dir="smoke-output/$(basename "${iso_path%.*}")"
             mkdir -p "$output_dir"
+            sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+            getfacl --absolute-names /dev/kvm
             if ! tests/iso/smoke.sh "$iso_path" "$output_dir"; then
               status=1
             fi

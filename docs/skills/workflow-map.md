@@ -57,7 +57,7 @@ Do not use this skill for implementation changes that belong in the workflow fil
 ## Operational notes
 
 - The reusable build job runs `ublue-os/remove-unwanted-software` with `extra-squeeze` before dependency installation and checkout on both amd64 and arm64. Keep it at the start of the job because Titanoboa expands the source image's OSTree layers onto the runner. This provides disk headroom; it does not establish that a failed build ran out of space.
-- `iso-smoke-test.yml` grants only the current runner user read/write access to `/dev/kvm` with a named-user ACL before QEMU starts. Keep the device's owner/group and other-user permissions intact; the unchanged smoke harness retains its `kvm:tcg` accelerator selection.
+- `iso-smoke-test.yml` grants only the current runner user read/write access to `/dev/kvm` with a named-user ACL before each smoke invocation. Keep the device's owner/group and other-user permissions intact; the unchanged smoke harness retains its `kvm:tcg` accelerator selection.
 - The cleanup action is pinned to the untagged `695eb75bc387dbcd9685a8e72d23439d8686cba6` commit from 2025-10-10. Do not label it `v10`: that was an upstream branch name, not a release tag. The released `v9` does not expose `extra-squeeze`; verify both tag provenance and inputs before changing the pin.
 - `just check` and pre-commit validate formatting and syntax, not ISO build or installation success. Inspect the individual CI jobs: arm64 build failures are tolerated while upstream manifests are incomplete, and Stable E2E jobs are skipped if their prerequisite build fails.
 - LTS non-HWE production promotion is disabled while the LTS build remains broken.
